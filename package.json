@@ -26,7 +26,7 @@
 		"start:mocks": "cross-env NODE_ENV=production MOCKS=true tsx .",
 		"test": "vitest",
 		"coverage": "vitest run --coverage",
-		"build": "run-s build:*",
+		"build": "run-s build:icons build:remix build:server",
 		"build:icons": "tsx ./other/build-icons.ts",
 		"build:remix": "remix vite:build --sourcemapClient --sourcemapServer",
 		"build:server": "tsx ./other/build-server.ts"
