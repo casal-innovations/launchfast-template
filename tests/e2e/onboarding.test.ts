@@ -145,13 +145,13 @@ test('completes onboarding after GitHub OAuth given valid user details', async (
 	await page.getByRole('button', { name: /signup with github/i }).click()
 
 	await expect(page).toHaveURL(/\/onboarding\/github/)
-	expect(
+	await expect(
 		page.getByText(new RegExp(`welcome aboard ${ghUser.primaryEmail}`, 'i')),
 	).toBeVisible()
 
 	// fields are pre-populated for the user, so we only need to accept
 	// terms of service and hit the 'crete an account' button
-	expect(page.getByRole('textbox', { name: /^name/i })).toHaveValue(
+	await expect(page.getByRole('textbox', { name: /^name/i })).toHaveValue(
 		ghUser.profile.name,
 	)
 	const createAccountButton = page.getByRole('button', {
@@ -209,7 +209,7 @@ test('logs user in after GitHub OAuth if they are already registered', async ({
 	await page.getByRole('button', { name: /signup with github/i }).click()
 
 	await expect(page).toHaveURL(`/`)
-	expect(
+	await expect(
 		page.getByText(
 			new RegExp(
 				`your "${ghUser!.profile.login}" github account has been connected`,
@@ -234,7 +234,7 @@ test('shows help texts on entering invalid details on onboarding page after GitH
 	await page.getByRole('button', { name: /signup with github/i }).click()
 
 	await expect(page).toHaveURL(/\/onboarding\/github/)
-	expect(
+	await expect(
 		page.getByText(new RegExp(`welcome aboard ${ghUser.primaryEmail}`, 'i')),
 	).toBeVisible()
 
@@ -242,8 +242,8 @@ test('shows help texts on entering invalid details on onboarding page after GitH
 	const createAccountButton = page.getByRole('button', {
 		name: /create an account/i,
 	})
-	expect(createAccountButton.getByRole('status')).not.toBeVisible()
-	expect(createAccountButton.getByText('error')).not.toBeAttached()
+	await expect(createAccountButton.getByRole('status')).not.toBeVisible()
+	await expect(createAccountButton.getByText('error')).not.toBeAttached()
 
 	// unchecked privacy consent box
 	await createAccountButton.click()

@@ -21,7 +21,7 @@ init()
 global.ENV = getEnv()
 
 if (ENV.MODE === 'production' && ENV.SENTRY_DSN) {
-	import('./utils/monitoring.server.ts').then(({ init }) => init())
+	void import('./utils/monitoring.server.ts').then(({ init }) => init())
 }
 
 type DocRequestArgs = Parameters<HandleDocumentRequestFunction>
@@ -103,7 +103,7 @@ export function handleError(
 	}
 	if (error instanceof Error) {
 		console.error(chalk.red(error.stack))
-		Sentry.captureRemixServerException(error, 'remix.server', request)
+		void Sentry.captureRemixServerException(error, 'remix.server', request)
 	} else {
 		console.error(chalk.red(error))
 		Sentry.captureException(error)

@@ -164,7 +164,7 @@ async function createFreeStripeSubscription({
 	if (!freePlanPrice) throw new Error('Unable to find Free Plan price.')
 
 	// Assign free subsription plan to the user
-	createStripeSubscription(user.customerId, freePlanPrice.id)
+	void createStripeSubscription(user.customerId, freePlanPrice.id)
 }
 
 export async function signup({

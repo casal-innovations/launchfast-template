@@ -5,13 +5,11 @@ export default [
 	...defaultConfig,
 	// add custom config objects here:
 	{
-		languageOptions: {
-			parserOptions: {
-				EXPERIMENTAL_useProjectService: {
-					maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING:
-						Infinity,
-				},
-			},
+		// Playwright test files use `use` as a fixture parameter name, which
+		// conflicts with React 19's `use()` hook detection in eslint-plugin-react-hooks
+		files: ['tests/**/*.ts'],
+		rules: {
+			'react-hooks/rules-of-hooks': 'off',
 		},
 	},
 ]
