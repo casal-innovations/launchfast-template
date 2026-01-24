@@ -1,202 +1,166 @@
 # Deployment
 
-When you first create a LaunchFast app, it should take you through a series of
-questions to get your app set up and deployed. However, we'll document the steps
-here in case things don't go well for you or you decide to do it manually later.
-
-## Deploying to Fly.io
-
-Prior to your first deployment, you'll need to do a few things:
-
-1. [Install Fly](https://fly.io/docs/getting-started/installing-flyctl/).
-
-   > **Note**: Try `flyctl` instead of `fly` if the commands below won't work.
-
-2. Sign up and log in to Fly:
-
-   ```sh
-   fly auth signup
-   ```
-
-   > **Note**: If you have more than one Fly account, ensure that you are signed
-   > into the same account in the Fly CLI as you are in the browser. In your
-   > terminal, run `fly auth whoami` and ensure the email matches the Fly
-   > account signed into the browser.
-
-3. Create two apps on Fly, one for staging and one for production:
-
-   ```sh
-   fly apps create [YOUR_APP_NAME]
-   fly apps create [YOUR_APP_NAME]-staging
-   ```
-
-   > **Note**: Make sure this name matches the `app` set in your `fly.toml`
-   > file. Otherwise, you will not be able to deploy.
-
-4. Initialize Git.
-
-   ```sh
-   git init
-   ```
-
-- Create a new [GitHub Repository](https://repo.new), and then add it as the
-  remote for your project. **Do not push your app yet!**
-
-  ```sh
-  git remote add origin <ORIGIN_URL>
-  ```
-
-5. Add secrets:
-
-- Add a `FLY_API_TOKEN` to your GitHub repo. To do this, go to your user
-  settings on Fly and create a new
-  [token](https://web.fly.io/user/personal_access_tokens/new), then add it to
-  [your repo secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
-  with the name `FLY_API_TOKEN`.
-
-- Add a `SESSION_SECRET` and `HONEYPOT_SECRET` to your fly app secrets, to do
-  this you can run the following commands:
-
-  ```sh
-  fly secrets set SESSION_SECRET=$(openssl rand -hex 32) HONEYPOT_SECRET=$(openssl rand -hex 32) --app [YOUR_APP_NAME]
-  fly secrets set SESSION_SECRET=$(openssl rand -hex 32) HONEYPOT_SECRET=$(openssl rand -hex 32) --app [YOUR_APP_NAME]-staging
-  ```
-
-  > **Note**: If you don't have openssl installed, you can also use
-  > [1Password](https://1password.com/password-generator) to generate a random
-  > secret, just replace `$(openssl rand -hex 32)` with the generated secret.
-
-- Add an `ALLOW_INDEXING` with `false` value to your non-production fly app
-  secrets, this is to prevent duplicate content from being indexed multiple
-  times by search engines. To do this you can run the following commands:
-
-  ```sh
-  fly secrets set ALLOW_INDEXING=false --app [YOUR_APP_NAME]-staging
-  ```
-
-6. Create production database:
-
-   Create a persistent volume for the SQLite database for both your staging and
-   production environments. Run the following (feel free to change the GB size
-   based on your needs and the region of your choice
-   (`https://fly.io/docs/reference/regions/`). If you do change the region, make
-   sure you change the `primary_region` in fly.toml as well):
-
-   ```sh
-   fly volumes create data --region sjc --size 1 --app [YOUR_APP_NAME]
-   fly volumes create data --region sjc --size 1 --app [YOUR_APP_NAME]-staging
-   ```
-
-7. Attach Consul:
-
-- Consul is a fly-managed service that manages your primary instance for data
-  replication
-  ([learn more about configuring consul](https://fly.io/docs/litefs/getting-started/#lease-configuration)).
-
-  ```sh
-  fly consul attach --app [YOUR_APP_NAME]
-  fly consul attach --app [YOUR_APP_NAME]-staging
-  ```
-
-8. Commit!
-
-   LaunchFast comes with a GitHub Action that handles automatically deploying
-   your app to production and staging environments.
-
-   Now that everything is set up, you can commit and push your changes to your
-   repo. Every commit to your `main` branch will trigger a deployment to your
-   production environment, and every commit to your `dev` branch will trigger a
-   deployment to your staging environment.
+> ⚠️ **Important**
+>
+> LaunchFast deployment is designed to be handled by the **LaunchFast
+> installer**. This document explains **what gets deployed and why**, how the
+> infrastructure works, and how to reason about it when debugging or
+> customizing.
+>
+> It is **not** intended to replace the installer or serve as the recommended
+> deployment path.
 
 ---
 
-### Optional: Email service setup
+## What the Installer Does
 
-Find instructions for this optional step in [the email docs](./email.md).
+When you opt into deployment during installation, LaunchFast automates the full
+deployment setup with correct defaults and guardrails:
 
-### Optional: Error monitoring setup
+- Injects deployment configuration files (`fly.toml`, `Dockerfile`, CI workflow)
+- Configures region-aware Fly.io settings
+- Verifies Fly.io billing and CLI availability
+- Sets up CI-based deploys for production and staging
+- Ensures secrets and infrastructure are created in the correct order
+- Prevents partial or inconsistent deployment states
 
-Find instructions for this optional step in
-[the error tracking docs](./monitoring.md).
+This automation is the product.  
+Everything below exists to help you **understand or extend** what was created.
 
-### Optional: Connecting to your production database
+---
 
-Find instructions for this optional step in [the database docs](./database.md).
+## Deployment Architecture Overview
 
-### Optional: Seeding Production
+LaunchFast deploys to **Fly.io** using:
 
-Find instructions for this optional step in [the database docs](./database.md).
+- A containerized Node.js application
+- SQLite databases replicated with **LiteFS**
+- Fly-managed volumes for persistent storage
+- Fly-managed Consul for primary/replica coordination
+- GitHub Actions for CI-driven deploys
 
-## Deploying locally using fly
+At runtime, the application automatically degrades to single-instance,
+local-database behavior when LiteFS or Fly-specific environment variables are
+not present.
 
-If you'd like to deploy locally you definitely can. You need to (temporarily)
-move the `Dockerfile` and the `.dockerignore` to the root of the project first.
-Then you can run the deploy command:
+---
 
-```
-mv ./other/Dockerfile Dockerfile
-mv ./other/.dockerignore .dockerignore
-fly deploy
-```
+## Fly.io Applications
 
-Once it's done, move the files back:
+A typical setup consists of two Fly apps:
 
-```
-mv Dockerfile ./other/Dockerfile
-mv .dockerignore ./other/.dockerignore
-```
+- **Production**: `your-app-name`
+- **Staging**: `your-app-name-staging`
 
-You can keep the `Dockerfile` and `.dockerignore` in the root if you prefer,
-just make sure to remove the move step from the `.github/workflows/deploy.yml`.
+Each app has:
 
-## Deploying locally using docker/podman
+- Its own persistent volume
+- Its own secrets
+- Its own deployment lifecycle
 
-If you'd like to deploy locally by building a docker container image, you
-definitely can. For that, you need to make some minimal changes to the
-Dockerfile located at other/Dockerfile. Remove everything from the line that
-says (#prepare for litefs) in "other/Dockerfile" till the end of the file and
-swap with the contents below.
+The installer ensures naming, regions, and configuration are consistent.
 
-```
-# prepare for litefs
-VOLUME /litefs
-ADD . .
+---
 
-EXPOSE ${PORT}
-ENTRYPOINT ["/myapp/other/docker-entry-point.sh"]
-```
+## Secrets and Environment Variables
 
-We're doing 2 things here:
+### Required Secrets (per app)
 
-1. docker volume is used to swap out the fly.io litefs mount.
-2. Docker ENTRYPOINT is used to execute some commands upon launching the docker
-   container
+These are set automatically during installation:
 
-Create a file at other/docker-entry-point.sh with the contents below.
+- `SESSION_SECRET`
+- `HONEYPOT_SECRET`
 
-```
-#!/bin/sh -ex
+### Environment-Specific
 
-npx prisma migrate deploy
-sqlite3 /litefs/data/sqlite.db "PRAGMA journal_mode = WAL;"
-sqlite3 /litefs/data/cache.db "PRAGMA journal_mode = WAL;"
-npm run start
-```
+- `ALLOW_INDEXING=false` (recommended for non-production environments)
 
-This takes care of applying Prisma migrations, followed by launching the node
-application (on port 8081).
+### Optional
 
-Helpful commands:
+- Email provider secrets (see email docs)
+- Monitoring provider secrets (see monitoring docs)
 
-```
-# builds the docker container
-docker build -t launch-fast . -f other/Dockerfile --build-arg COMMIT_SHA=`git rev-parse --short HEAD`
+Secrets are managed via Fly.io secrets, **not** `.env` files.
 
-# mountpoint for your sqlite databases
-mkdir ~/litefs
+---
 
-# Runs the docker container.
-docker run -d -p 8081:8081 -e SESSION_SECRET='somesecret' -e HONEYPOT_SECRET='somesecret' -e FLY='false' -v ~/litefs:/litefs launch-fast
+## Database and LiteFS
 
-# http://localhost:8081 should now point to your docker instance. ~/litefs directory has the sqlite databases
-```
+LaunchFast uses SQLite with LiteFS replication.
+
+Key properties:
+
+- A Fly volume named `data` is mounted per app
+- One instance is elected primary via Consul
+- Writes occur only on the primary
+- Reads transparently work on replicas
+
+For local development or non-LiteFS environments:
+
+- LiteFS automatically becomes a no-op
+- SQLite runs from local filesystem paths
+
+No code changes are required to switch modes.
+
+---
+
+## CI-Based Deployment
+
+By default, LaunchFast uses CI-driven deployment:
+
+- `main` branch → production
+- `dev` branch → staging
+
+Each deployment:
+
+- Builds the container image
+- Runs migrations
+- Deploys via Fly.io
+
+This ensures deployments are repeatable and auditable.
+
+---
+
+## Advanced: Manual or Custom Deployment
+
+Some advanced users may choose to:
+
+- Modify the Dockerfile
+- Change Fly regions or scaling behavior
+- Deploy without CI
+- Run the app in Docker or Podman locally
+
+These are **supported but not optimized paths**.
+
+If you take this route, you are responsible for:
+
+- Correct file placement
+- Secret management
+- Volume and LiteFS configuration
+- Deployment ordering
+
+The installer exists specifically to remove this burden.
+
+---
+
+## When to Use This Document
+
+Use this document if you need to:
+
+- Understand how LaunchFast deploys your app
+- Debug a deployment issue
+- Customize infrastructure behavior
+- Explain the architecture to teammates
+- Extend or replace parts of the deployment system intentionally
+
+If your goal is simply to deploy correctly and quickly:  
+**Use the installer.**
+
+---
+
+## Related Documentation
+
+- Email setup: `docs/documentation/email.md`
+- Monitoring: `docs/documentation/monitoring.md`
+- Database usage: `docs/documentation/database.md`
+- Secrets management: `docs/documentation/secrets.md`
