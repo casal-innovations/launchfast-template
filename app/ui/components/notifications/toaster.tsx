@@ -14,6 +14,8 @@ const Toaster = ({ theme, ...props }: ToasterProps) => {
 					toast:
 						'group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-brand-border group-[.toaster]:shadow-lg',
 					description: 'group-[.toast]:text-muted-500',
+					closeButton:
+						'group-[.toast]:bg-background group-[.toast]:border-brand-border group-[.toast]:text-foreground group-[.toast]:hover:bg-muted-100',
 				},
 			}}
 			{...props}
