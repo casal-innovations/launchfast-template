@@ -1,7 +1,6 @@
 import fs from 'node:fs'
 import { faker } from '@faker-js/faker'
 import { type PrismaClient } from '@prisma/client'
-import bcrypt from 'bcryptjs'
 import { UniqueEnforcer } from 'enforce-unique'
 
 const uniqueEmailEnforcer = new UniqueEnforcer()
@@ -15,12 +14,6 @@ export function createUser() {
 		.enforce(() => faker.internet.email({ firstName, lastName }))
 		.toLowerCase()
 	return { name, email }
-}
-
-export function createPassword(password: string = faker.internet.password()) {
-	return {
-		hash: bcrypt.hashSync(password, 10),
-	}
 }
 
 let userImages: Array<Awaited<ReturnType<typeof img>>> | undefined

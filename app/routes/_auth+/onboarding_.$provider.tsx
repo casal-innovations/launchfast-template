@@ -49,7 +49,6 @@ const SignupFormSchema = z.object({
 	agreeToTermsOfServiceAndPrivacyPolicy: z.boolean({
 		required_error: 'You must agree to the terms of service and privacy policy',
 	}),
-	remember: z.boolean().optional(),
 	redirectTo: z.string().optional(),
 })
 
@@ -73,12 +72,11 @@ async function requireData({
 			providerId: z.string(),
 		})
 		.safeParse({ email, providerName: params.provider, providerId })
-	if (result.success) {
-		return result.data
-	} else {
+	if (!result.success) {
 		console.error(result.error)
-		throw redirect('/signup')
+		throw redirect('/login')
 	}
+	return result.data
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
@@ -136,7 +134,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 		)
 	}
 
-	const { session, remember, redirectTo } = submission.value
+	const { session, redirectTo } = submission.value
 
 	const authSession = await authSessionStorage.getSession(
 		request.headers.get('cookie'),
@@ -146,7 +144,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 	headers.append(
 		'set-cookie',
 		await authSessionStorage.commitSession(authSession, {
-			expires: remember ? session.expirationDate : undefined,
+			expires: session.expirationDate,
 		}),
 	)
 	headers.append(
@@ -161,9 +159,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 	)
 }
 
-export const meta: MetaFunction = () => {
-	return [{ title: `Setup ${appName} Account` }]
-}
+export const meta: MetaFunction = () => [{ title: `Setup ${appName} Account` }]
 
 export default function OnboardingProviderRoute() {
 	const data = useLoaderData<typeof loader>()
@@ -231,15 +227,6 @@ export default function OnboardingProviderRoute() {
 						)}
 						errors={fields.agreeToTermsOfServiceAndPrivacyPolicy.errors}
 					/>
-					<CheckboxField
-						labelProps={{
-							htmlFor: fields.remember.id,
-							children: 'Remember me',
-						}}
-						buttonProps={getInputProps(fields.remember, { type: 'checkbox' })}
-						errors={fields.remember.errors}
-					/>
-
 					{redirectTo ? (
 						<input type="hidden" name="redirectTo" value={redirectTo} />
 					) : null}
@@ -253,7 +240,7 @@ export default function OnboardingProviderRoute() {
 							type="submit"
 							disabled={isPending}
 						>
-							Create an account
+							Continue
 						</StatusButton>
 					</div>
 				</Form>

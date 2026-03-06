@@ -21,7 +21,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
 					contentType: true,
 				},
 			},
-			password: false, // <-- intentionally omit password
 			sessions: true,
 			roles: true,
 		},

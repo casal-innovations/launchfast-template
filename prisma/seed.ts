@@ -3,7 +3,6 @@ import { prisma } from '#app/utils/db.server.ts'
 import { MOCK_CODE_GITHUB } from '#app/utils/providers/constants'
 import {
 	cleanupDb,
-	createPassword,
 	createUser,
 	getUserImages,
 	img,
@@ -70,7 +69,6 @@ async function seed() {
 				select: { id: true },
 				data: {
 					...userData,
-					password: { create: createPassword(userData.email) },
 					image: { create: userImages[index % userImages.length] },
 					roles: { connect: { name: 'user' } },
 				},
@@ -96,7 +94,6 @@ async function seed() {
 			name: 'Admin',
 			email: 'admin@example.com',
 			image: { create: adminImage.adminUser },
-			password: { create: createPassword('youareawesome') },
 			connections: {
 				create: { providerName: 'github', providerId: githubUser.profile.id },
 			},

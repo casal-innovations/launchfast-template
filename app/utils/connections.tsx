@@ -1,5 +1,6 @@
 import { Form } from '@remix-run/react'
 import { z } from 'zod'
+import { type ButtonProps } from '#app/ui/components/buttons/button.tsx'
 import { StatusButton } from '#app/ui/components/buttons/status-button.tsx'
 import { Icon } from '#app/ui/components/media/icon.tsx'
 import { useIsPending } from './misc.tsx'
@@ -19,15 +20,21 @@ export const providerIcons: Record<ProviderName, React.ReactNode> = {
 	[GITHUB_PROVIDER_NAME]: <Icon name="github-logo" />,
 } as const
 
+type ProviderConnectionFormProps = {
+	redirectTo?: string | null
+	type: 'Connect' | 'Continue' | 'Sign in' | 'Sign up'
+	providerName: ProviderName
+	variant?: ButtonProps['variant']
+	suffix?: React.ReactNode
+}
+
 export function ProviderConnectionForm({
 	redirectTo,
 	type,
 	providerName,
-}: {
-	redirectTo?: string | null
-	type: 'Connect' | 'Login' | 'Signup'
-	providerName: ProviderName
-}) {
+	variant,
+	suffix,
+}: ProviderConnectionFormProps) {
 	const label = providerLabels[providerName]
 	const formAction = `/auth/${providerName}`
 	const isPending = useIsPending({ formAction })
@@ -43,12 +50,14 @@ export function ProviderConnectionForm({
 			<StatusButton
 				type="submit"
 				className="w-full"
+				variant={variant}
 				status={isPending ? 'pending' : 'idle'}
 			>
 				<span className="inline-flex items-center gap-1.5">
 					{providerIcons[providerName]}
 					<span>
 						{type} with {label}
+						{suffix}
 					</span>
 				</span>
 			</StatusButton>

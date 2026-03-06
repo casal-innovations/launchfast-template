@@ -27,25 +27,19 @@ import { checkHoneypot } from '#app/utils/honeypot.server.ts'
 import { useIsPending } from '#app/utils/misc.tsx'
 import { authSessionStorage } from '#app/utils/session.server.ts'
 import { redirectWithToast } from '#app/utils/toast.server.ts'
-import {
-	NameSchema,
-	PasswordAndConfirmPasswordSchema,
-} from '#app/utils/user-validation.ts'
+import { NameSchema } from '#app/utils/user-validation.ts'
 import { verifySessionStorage } from '#app/utils/verification.server.ts'
 
 export const onboardingEmailSessionKey = 'onboardingEmail'
 
-const SignupFormSchema = z
-	.object({
-		name: NameSchema,
-		agreeToTermsOfServiceAndPrivacyPolicy: z.boolean({
-			required_error:
-				'You must agree to the terms of service and privacy policy',
-		}),
-		remember: z.boolean().optional(),
-		redirectTo: z.string().optional(),
-	})
-	.and(PasswordAndConfirmPasswordSchema)
+const SignupFormSchema = z.object({
+	name: NameSchema,
+	agreeToTermsOfServiceAndPrivacyPolicy: z.boolean({
+		required_error:
+			'You must agree to the terms of service and privacy policy',
+	}),
+	redirectTo: z.string().optional(),
+})
 
 async function requireOnboardingEmail(request: Request) {
 	await requireAnonymous(request)
@@ -54,7 +48,7 @@ async function requireOnboardingEmail(request: Request) {
 	)
 	const email = verifySession.get(onboardingEmailSessionKey)
 	if (typeof email !== 'string' || !email) {
-		throw redirect('/signup')
+		throw redirect('/login')
 	}
 	return email
 }
@@ -86,7 +80,7 @@ export async function action({ request }: ActionFunctionArgs) {
 		)
 	}
 
-	const { session, remember, redirectTo } = submission.value
+	const { session, redirectTo } = submission.value
 
 	const authSession = await authSessionStorage.getSession(
 		request.headers.get('cookie'),
@@ -97,7 +91,7 @@ export async function action({ request }: ActionFunctionArgs) {
 	headers.append(
 		'set-cookie',
 		await authSessionStorage.commitSession(authSession, {
-			expires: remember ? session.expirationDate : undefined,
+			expires: session.expirationDate,
 		}),
 	)
 	headers.append(
@@ -105,7 +99,7 @@ export async function action({ request }: ActionFunctionArgs) {
 		await verifySessionStorage.destroySession(verifySession),
 	)
 
-	const redirect = redirectTo ?? stripe ? '/account' : '/settings/profile'
+	const redirect = redirectTo ?? (stripe ? '/account' : '/settings/profile')
 
 	return redirectWithToast(
 		safeRedirect(redirect),
@@ -114,9 +108,7 @@ export async function action({ request }: ActionFunctionArgs) {
 	)
 }
 
-export const meta: MetaFunction = () => {
-	return [{ title: `Setup ${appName} Account` }]
-}
+export const meta: MetaFunction = () => [{ title: `Setup ${appName} Account` }]
 
 export default function OnboardingRoute() {
 	const data = useLoaderData<typeof loader>()
@@ -160,26 +152,6 @@ export default function OnboardingRoute() {
 						}}
 						errors={fields.name.errors}
 					/>
-					<Field
-						labelProps={{ htmlFor: fields.password.id, children: 'Password' }}
-						inputProps={{
-							...getInputProps(fields.password, { type: 'password' }),
-							autoComplete: 'new-password',
-						}}
-						errors={fields.password.errors}
-					/>
-
-					<Field
-						labelProps={{
-							htmlFor: fields.confirmPassword.id,
-							children: 'Confirm Password',
-						}}
-						inputProps={{
-							...getInputProps(fields.confirmPassword, { type: 'password' }),
-							autoComplete: 'new-password',
-						}}
-						errors={fields.confirmPassword.errors}
-					/>
 
 					<CheckboxField
 						labelProps={{
@@ -193,15 +165,6 @@ export default function OnboardingRoute() {
 						)}
 						errors={fields.agreeToTermsOfServiceAndPrivacyPolicy.errors}
 					/>
-					<CheckboxField
-						labelProps={{
-							htmlFor: fields.remember.id,
-							children: 'Remember me',
-						}}
-						buttonProps={getInputProps(fields.remember, { type: 'checkbox' })}
-						errors={fields.remember.errors}
-					/>
-
 					<input {...getInputProps(fields.redirectTo, { type: 'hidden' })} />
 					<ErrorList errors={form.errors} id={form.errorId} />
 
@@ -212,7 +175,7 @@ export default function OnboardingRoute() {
 							type="submit"
 							disabled={isPending}
 						>
-							Create an account
+							Continue
 						</StatusButton>
 					</div>
 				</Form>

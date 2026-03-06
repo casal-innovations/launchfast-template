@@ -1,10 +1,7 @@
 import { invariant } from '@epic-web/invariant'
 import * as E from '@react-email/components'
 import { json } from '@remix-run/node'
-import {
-	requireRecentVerification,
-	type VerifyFunctionArgs,
-} from '#app/routes/_auth+/verify.server.ts'
+import { type VerifyFunctionArgs } from '#app/routes/_auth+/verify.server.ts'
 import { appName } from '#app/utils/constants.ts'
 import { prisma } from '#app/utils/db.server.ts'
 import { sendEmail } from '#app/utils/email.server.ts'
@@ -16,7 +13,6 @@ export async function handleVerification({
 	request,
 	submission,
 }: VerifyFunctionArgs) {
-	await requireRecentVerification(request)
 	invariant(
 		submission.status === 'success',
 		'Submission should be successful by now',

@@ -2,33 +2,38 @@ import { getFormProps, getInputProps, useForm } from '@conform-to/react'
 import { getZodConstraint, parseWithZod } from '@conform-to/zod'
 import {
 	json,
+	redirect,
 	type ActionFunctionArgs,
 	type LoaderFunctionArgs,
 	type MetaFunction,
 } from '@remix-run/node'
-import { Form, Link, useActionData, useSearchParams } from '@remix-run/react'
+import { Form, useActionData, useSearchParams } from '@remix-run/react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { HoneypotInputs } from 'remix-utils/honeypot/react'
 import { z } from 'zod'
+import { MagicLinkEmail } from '#app/ui/components/emails/magic-link-email.tsx'
 import { StatusButton } from '#app/ui/components/buttons/status-button.tsx'
 import { GeneralErrorBoundary } from '#app/ui/components/custom/error-boundary.tsx'
-import { CheckboxField, ErrorList, Field } from '#app/ui/components/forms.tsx'
+import { ErrorList, Field } from '#app/ui/components/forms.tsx'
 import { Spacer } from '#app/ui/components/layout/spacer.tsx'
-import { login, requireAnonymous } from '#app/utils/auth.server.ts'
+import { requireAnonymous } from '#app/utils/auth.server.ts'
 import {
 	ProviderConnectionForm,
 	providerNames,
 } from '#app/utils/connections.tsx'
 import { appName } from '#app/utils/constants.ts'
+import { sendEmail } from '#app/utils/email.server.ts'
 import { checkHoneypot } from '#app/utils/honeypot.server.ts'
 import { useIsPending } from '#app/utils/misc.tsx'
-import { EmailSchema, PasswordSchema } from '#app/utils/user-validation.ts'
-import { handleNewSession } from './login.server.ts'
+import { EmailSchema } from '#app/utils/user-validation.ts'
+import {
+	isVerificationCooldownActive,
+	prepareVerification,
+} from './verify.server.ts'
 
-const LoginFormSchema = z.object({
+const LoginSchema = z.object({
 	email: EmailSchema,
-	password: PasswordSchema,
 	redirectTo: z.string().optional(),
-	remember: z.boolean().optional(),
 })
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -40,40 +45,93 @@ export async function action({ request }: ActionFunctionArgs) {
 	await requireAnonymous(request)
 	const formData = await request.formData()
 	checkHoneypot(formData)
+
 	const submission = await parseWithZod(formData, {
-		schema: intent =>
-			LoginFormSchema.transform(async (data, ctx) => {
-				if (intent !== null) return { ...data, session: null }
-
-				const session = await login(data)
-				if (!session) {
-					ctx.addIssue({
-						code: z.ZodIssueCode.custom,
-						message: 'Invalid email or password',
-					})
-					return z.NEVER
-				}
-
-				return { ...data, session }
-			}),
+		schema: LoginSchema,
 		async: true,
 	})
 
-	if (submission.status !== 'success' || !submission.value.session) {
+	if (submission.status !== 'success') {
 		return json(
-			{ result: submission.reply({ hideFields: ['password'] }) },
-			{ status: submission.status === 'error' ? 401 : 200 },
+			{ result: submission.reply() },
+			{ status: submission.status === 'error' ? 400 : 200 },
 		)
 	}
 
-	const { session, remember, redirectTo } = submission.value
+	const { email, redirectTo } = submission.value
 
-	return handleNewSession({
+	const cooldownActive = await isVerificationCooldownActive({
+		target: email,
+		type: 'magic-link',
+	})
+	if (cooldownActive) {
+		return json(
+			{
+				result: submission.reply({
+					formErrors: [
+						'A verification email was already sent. Please wait a minute before requesting another.',
+					],
+				}),
+			},
+			{ status: 429 },
+		)
+	}
+
+	const {
+		verifyUrl,
+		redirectTo: redirectToVerifyPage,
+		otp,
+	} = await prepareVerification({
+		period: 10 * 60,
 		request,
-		session,
-		remember: remember ?? false,
+		type: 'magic-link',
+		target: email,
 		redirectTo,
 	})
+
+	const response = await sendEmail({
+		to: email,
+		subject: `Your ${appName} sign-in link`,
+		react: <MagicLinkEmail verifyUrl={verifyUrl.toString()} otp={otp} />,
+	})
+
+	if (response.status !== 'success') {
+		return json(
+			{
+				result: submission.reply({
+					formErrors: [response.error.message],
+				}),
+			},
+			{ status: 500 },
+		)
+	}
+
+	return redirect(redirectToVerifyPage.toString())
+}
+
+const COOLDOWN_SECONDS = 60
+const LAST_LOGIN_METHOD_KEY = 'lf_last_login_method'
+
+type LoginMethod = 'github' | 'magic-link'
+
+function LastUsedSuffix({ show }: { show: boolean }): ReactNode {
+	if (!show) return null
+	return (
+		<>
+			<span className="text-muted-400"> · </span>
+			<span className="text-muted-400 font-normal">Last used</span>
+		</>
+	)
+}
+
+function Divider({ label, className }: { label: string; className?: string }): ReactNode {
+	return (
+		<div className={`flex items-center gap-4 ${className ?? ''}`}>
+			<div className="h-px flex-1 bg-brand-border" />
+			<span className="text-body-xs text-muted-600">{label}</span>
+			<div className="h-px flex-1 bg-brand-border" />
+		</div>
+	)
 }
 
 export default function LoginPage() {
@@ -84,30 +142,116 @@ export default function LoginPage() {
 
 	const [form, fields] = useForm({
 		id: 'login-form',
-		constraint: getZodConstraint(LoginFormSchema),
+		constraint: getZodConstraint(LoginSchema),
 		defaultValue: { redirectTo },
 		lastResult: actionData?.result,
 		onValidate({ formData }) {
-			return parseWithZod(formData, { schema: LoginFormSchema })
+			return parseWithZod(formData, { schema: LoginSchema })
 		},
 		shouldRevalidate: 'onBlur',
 	})
+
+	// 60-second cooldown for magic link button
+	const [cooldownRemaining, setCooldownRemaining] = useState(0)
+	const cooldownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+		null,
+	)
+
+	useEffect(() => {
+		return () => {
+			if (cooldownIntervalRef.current) {
+				clearInterval(cooldownIntervalRef.current)
+			}
+		}
+	}, [])
+
+	const startCooldown = () => {
+		setCooldownRemaining(COOLDOWN_SECONDS)
+		cooldownIntervalRef.current = setInterval(() => {
+			setCooldownRemaining(prev => {
+				if (prev <= 1) {
+					if (cooldownIntervalRef.current) {
+						clearInterval(cooldownIntervalRef.current)
+						cooldownIntervalRef.current = null
+					}
+					return 0
+				}
+				return prev - 1
+			})
+		}, 1000)
+	}
+
+	const isMagicLinkCoolingDown = cooldownRemaining > 0
+
+	// Last used badge — read from localStorage on mount to avoid SSR mismatch
+	const [lastLoginMethod, setLastLoginMethod] = useState<LoginMethod | null>(
+		null,
+	)
+
+	useEffect(() => {
+		try {
+			const stored = localStorage.getItem(LAST_LOGIN_METHOD_KEY)
+			if (stored === 'github' || stored === 'magic-link') {
+				setLastLoginMethod(stored)
+			}
+		} catch {
+			// localStorage unavailable
+		}
+	}, [])
+
+	const saveLoginMethod = (method: LoginMethod) => {
+		try {
+			localStorage.setItem(LAST_LOGIN_METHOD_KEY, method)
+		} catch {
+			// localStorage unavailable
+		}
+	}
 
 	return (
 		<div className="flex min-h-full flex-col justify-center pb-32 pt-20">
 			<div className="mx-auto w-full max-w-md">
 				<div className="flex flex-col gap-3 text-center">
-					<h1 className="text-h1">Welcome back!</h1>
+					<h1 className="text-h1">Welcome to {appName}</h1>
 					<p className="text-body-md text-muted-600">
-						Please enter your details.
+						Sign in or create an account.
 					</p>
 				</div>
 				<Spacer size="xs" />
 
 				<div>
 					<div className="mx-auto w-full max-w-md px-8">
-						<Form method="POST" {...getFormProps(form)}>
+						{/* OAuth */}
+						<ul className="flex flex-col gap-5">
+							{providerNames.map(providerName => (
+								<li key={providerName}>
+									<div onClick={() => saveLoginMethod(providerName)}>
+										<ProviderConnectionForm
+											type="Continue"
+											providerName={providerName}
+											redirectTo={redirectTo}
+											variant="outline"
+											suffix={<LastUsedSuffix show={lastLoginMethod === providerName} />}
+										/>
+									</div>
+								</li>
+							))}
+						</ul>
+
+						<Divider label="or" className="py-5" />
+
+						{/* Email magic link */}
+						<Form
+							method="POST"
+							{...getFormProps(form)}
+							onSubmit={() => {
+								if (!isMagicLinkCoolingDown) {
+									saveLoginMethod('magic-link')
+									startCooldown()
+								}
+							}}
+						>
 							<HoneypotInputs />
+
 							<Field
 								labelProps={{ children: 'Email' }}
 								inputProps={{
@@ -119,77 +263,23 @@ export default function LoginPage() {
 								errors={fields.email.errors}
 							/>
 
-							<Field
-								labelProps={{ children: 'Password' }}
-								inputProps={{
-									...getInputProps(fields.password, {
-										type: 'password',
-									}),
-									autoComplete: 'current-password',
-								}}
-								errors={fields.password.errors}
-							/>
-
-							<div className="flex justify-between">
-								<CheckboxField
-									labelProps={{
-										htmlFor: fields.remember.id,
-										children: 'Remember me',
-									}}
-									buttonProps={getInputProps(fields.remember, {
-										type: 'checkbox',
-									})}
-									errors={fields.remember.errors}
-								/>
-								<div>
-									<Link
-										to="/forgot-password"
-										className="text-body-xs font-semibold"
-									>
-										Forgot password?
-									</Link>
-								</div>
-							</div>
-
 							<input
 								{...getInputProps(fields.redirectTo, { type: 'hidden' })}
 							/>
 							<ErrorList errors={form.errors} id={form.errorId} />
 
-							<div className="flex items-center justify-between gap-6 pt-3">
-								<StatusButton
-									className="w-full"
-									status={isPending ? 'pending' : form.status ?? 'idle'}
-									type="submit"
-									disabled={isPending}
-								>
-									Log in
-								</StatusButton>
-							</div>
-						</Form>
-						<ul className="mt-5 flex flex-col gap-5 border-b-2 border-t-2 border-brand-border py-3">
-							{providerNames.map(providerName => (
-								<li key={providerName}>
-									<ProviderConnectionForm
-										type="Login"
-										providerName={providerName}
-										redirectTo={redirectTo}
-									/>
-								</li>
-							))}
-						</ul>
-						<div className="flex items-center justify-center gap-2 pt-6">
-							<span className="text-muted-600">New here?</span>
-							<Link
-								to={
-									redirectTo
-										? `/signup?${encodeURIComponent(redirectTo)}`
-										: '/signup'
-								}
+							<StatusButton
+								className="w-full"
+								status={isPending ? 'pending' : form.status ?? 'idle'}
+								type="submit"
+								disabled={isPending || isMagicLinkCoolingDown}
 							>
-								Create an account
-							</Link>
-						</div>
+								{isMagicLinkCoolingDown
+									? `Continue (${cooldownRemaining}s)`
+									: 'Continue'}
+								<LastUsedSuffix show={lastLoginMethod === 'magic-link'} />
+							</StatusButton>
+						</Form>
 					</div>
 				</div>
 			</div>
@@ -197,9 +287,7 @@ export default function LoginPage() {
 	)
 }
 
-export const meta: MetaFunction = () => {
-	return [{ title: `Login to ${appName}` }]
-}
+export const meta: MetaFunction = () => [{ title: `Welcome to ${appName}` }]
 
 export function ErrorBoundary() {
 	return <GeneralErrorBoundary />

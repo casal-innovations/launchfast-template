@@ -10,6 +10,12 @@ import {
 import { useFetcher, useLoaderData } from '@remix-run/react'
 import { useState } from 'react'
 import { StatusButton } from '#app/ui/components/buttons/status-button.tsx'
+import {
+	Card,
+	CardContent,
+	CardHeader,
+	CardTitle,
+} from '#app/ui/components/data-display/card.tsx'
 import { Icon } from '#app/ui/components/media/icon.tsx'
 import {
 	Tooltip,
@@ -29,25 +35,14 @@ import {
 import { prisma } from '#app/utils/db.server.ts'
 import { makeTimings } from '#app/utils/timing.server.ts'
 import { createToastHeaders } from '#app/utils/toast.server.ts'
-import { type BreadcrumbHandle } from './profile.tsx'
 
-export const handle: BreadcrumbHandle & SEOHandle = {
-	breadcrumb: <Icon name="link-2">Connections</Icon>,
+export const handle: SEOHandle = {
 	getSitemapEntries: () => null,
 }
 
-async function userCanDeleteConnections(userId: string) {
-	const user = await prisma.user.findUnique({
-		select: {
-			password: { select: { userId: true } },
-			_count: { select: { connections: true } },
-		},
-		where: { id: userId },
-	})
-	// user can delete their connections if they have a password
-	if (user?.password) return true
-	// users have to have more than one remaining connection to delete one
-	return Boolean(user?._count.connections && user?._count.connections > 1)
+// Users can always delete connections because they can still log in via magic link
+async function userCanDeleteConnections(_userId: string) {
+	return true
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -106,7 +101,7 @@ export async function action({ request }: ActionFunctionArgs) {
 	)
 	invariantResponse(
 		await userCanDeleteConnections(userId),
-		'You cannot delete your last connection unless you have a password.',
+		'Cannot delete connection.',
 	)
 	const connectionId = formData.get('connectionId')
 	invariantResponse(typeof connectionId === 'string', 'Invalid connectionId')
@@ -127,34 +122,48 @@ export default function Connections() {
 	const data = useLoaderData<typeof loader>()
 
 	return (
-		<div className="mx-auto max-w-md">
-			{data.connections.length ? (
-				<div className="flex flex-col gap-2">
-					<p>Here are your current connections:</p>
-					<ul className="flex flex-col gap-4">
-						{data.connections.map(c => (
-							<li key={c.id}>
-								<Connection
-									connection={c}
-									canDelete={data.canDeleteConnections}
-								/>
-							</li>
-						))}
-					</ul>
+		<Card>
+			<CardHeader>
+				<CardTitle>Connections</CardTitle>
+			</CardHeader>
+			<CardContent>
+				<div className="mx-auto max-w-md">
+					{data.connections.length ? (
+						<div className="flex flex-col gap-2">
+							<p>Here are your current connections:</p>
+							<ul className="flex flex-col gap-4">
+								{data.connections.map(c => (
+									<li key={c.id}>
+										<Connection
+											connection={c}
+											canDelete={data.canDeleteConnections}
+										/>
+									</li>
+								))}
+							</ul>
+						</div>
+					) : (
+						<p>You don't have any connections yet.</p>
+					)}
+					{(() => {
+						const connectedProviders = new Set(data.connections.map(c => c.providerName))
+						const unconnectedProviders = providerNames.filter(p => !connectedProviders.has(p))
+						if (unconnectedProviders.length === 0) return null
+						return (
+							<div className="mt-5 flex flex-col gap-5 border-b-2 border-t-2 border-brand-border py-3">
+								{unconnectedProviders.map(providerName => (
+									<ProviderConnectionForm
+										key={providerName}
+										type="Connect"
+										providerName={providerName}
+									/>
+								))}
+							</div>
+						)
+					})()}
 				</div>
-			) : (
-				<p>You don't have any connections yet.</p>
-			)}
-			<div className="mt-5 flex flex-col gap-5 border-b-2 border-t-2 border-brand-border py-3">
-				{providerNames.map(providerName => (
-					<ProviderConnectionForm
-						key={providerName}
-						type="Connect"
-						providerName={providerName}
-					/>
-				))}
-			</div>
-		</div>
+			</CardContent>
+		</Card>
 	)
 }
 
@@ -170,7 +179,7 @@ function Connection({
 	const icon = providerIcons[connection.providerName]
 	return (
 		<div className="flex justify-between gap-2">
-			<span className={`inline-flex items-center gap-1.5`}>
+			<span className="inline-flex items-center gap-1.5">
 				{icon}
 				<span>
 					{connection.link ? (
@@ -214,7 +223,7 @@ function Connection({
 							<Icon name="question-mark-circled"></Icon>
 						</TooltipTrigger>
 						<TooltipContent>
-							You cannot delete your last connection unless you have a password.
+							You cannot delete this connection.
 						</TooltipContent>
 					</Tooltip>
 				</TooltipProvider>

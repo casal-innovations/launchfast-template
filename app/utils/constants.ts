@@ -1,1 +1,2 @@
-export const appName = 'Launch Fast'
+export const appName = 'LaunchFast'
+export const supportEmail = 'support@yourdomain.com'

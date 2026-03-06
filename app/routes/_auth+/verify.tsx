@@ -2,6 +2,7 @@ import { getFormProps, getInputProps, useForm } from '@conform-to/react'
 import { getZodConstraint, parseWithZod } from '@conform-to/zod'
 import { type ActionFunctionArgs } from '@remix-run/node'
 import { Form, useActionData, useSearchParams } from '@remix-run/react'
+import { useEffect, useRef } from 'react'
 import { HoneypotInputs } from 'remix-utils/honeypot/react'
 import { z } from 'zod'
 import { StatusButton } from '#app/ui/components/buttons/status-button.tsx'
@@ -16,7 +17,7 @@ export const codeQueryParam = 'code'
 export const targetQueryParam = 'target'
 export const typeQueryParam = 'type'
 export const redirectToQueryParam = 'redirectTo'
-const types = ['onboarding', 'reset-password', 'change-email', '2fa'] as const
+const types = ['onboarding', 'change-email', 'magic-link'] as const
 const VerificationTypeSchema = z.enum(types)
 export type VerificationTypes = z.infer<typeof VerificationTypeSchema>
 
@@ -37,10 +38,26 @@ export default function VerifyRoute() {
 	const [searchParams] = useSearchParams()
 	const isPending = useIsPending()
 	const actionData = useActionData<typeof action>()
-	const parseWithZoddType = VerificationTypeSchema.safeParse(
+	const formRef = useRef<HTMLFormElement>(null)
+	const hasSubmitted = useRef(false)
+
+	const parsedType = VerificationTypeSchema.safeParse(
 		searchParams.get(typeQueryParam),
 	)
-	const type = parseWithZoddType.success ? parseWithZoddType.data : null
+	const type = parsedType.success ? parsedType.data : null
+
+	const code = searchParams.get(codeQueryParam)
+	const target = searchParams.get(targetQueryParam)
+	const redirectTo = searchParams.get(redirectToQueryParam)
+	const hasAllParams = Boolean(code && type && target)
+
+	// Auto-submit when all params are present (e.g. user clicked the email link)
+	useEffect(() => {
+		if (hasAllParams && !hasSubmitted.current) {
+			hasSubmitted.current = true
+			formRef.current?.submit()
+		}
+	}, [hasAllParams])
 
 	const checkEmail = (
 		<>
@@ -53,32 +70,110 @@ export default function VerifyRoute() {
 
 	const headings: Record<VerificationTypes, React.ReactNode> = {
 		onboarding: checkEmail,
-		'reset-password': checkEmail,
 		'change-email': checkEmail,
-		'2fa': (
-			<>
-				<h1 className="text-h1">Check your 2FA app</h1>
-				<p className="mt-3 text-body-md text-muted-600">
-					Please enter your 2FA code to verify your identity.
-				</p>
-			</>
-		),
+		'magic-link': checkEmail,
 	}
 
 	const [form, fields] = useForm({
-		id: 'verify-form',
+		id: `verify-form-${type}-${target}`,
 		constraint: getZodConstraint(VerifySchema),
 		lastResult: actionData?.result,
 		onValidate({ formData }) {
 			return parseWithZod(formData, { schema: VerifySchema })
 		},
 		defaultValue: {
-			code: searchParams.get(codeQueryParam),
-			type: type,
-			target: searchParams.get(targetQueryParam),
-			redirectTo: searchParams.get(redirectToQueryParam),
+			code,
+			type,
+			target,
+			redirectTo,
 		},
 	})
+
+	// When all URL params are present, show a loading state with auto-submit
+	if (hasAllParams) {
+		return (
+			<main className="container flex flex-col items-center justify-center pb-32 pt-20">
+				<noscript>
+					<style>{`.js-only { display: none !important; }`}</style>
+				</noscript>
+
+				{/* Loading state — hidden for noscript users */}
+				<div className="js-only flex flex-col items-center gap-4 text-center">
+					<h1 className="text-h1">Verifying...</h1>
+					<p className="text-body-md text-muted-600">Signing you in...</p>
+					<div className="h-8 w-8 animate-spin rounded-full border-4 border-muted-300 border-t-foreground" />
+				</div>
+
+				{/* Hidden auto-submit form — JS submits this on mount */}
+				<Form ref={formRef} method="POST" className="hidden">
+					<HoneypotInputs />
+					<input type="hidden" name={codeQueryParam} value={code ?? ''} />
+					<input type="hidden" name={typeQueryParam} value={type ?? ''} />
+					<input
+						type="hidden"
+						name={targetQueryParam}
+						value={target ?? ''}
+					/>
+					{redirectTo ? (
+						<input
+							type="hidden"
+							name={redirectToQueryParam}
+							value={redirectTo}
+						/>
+					) : null}
+				</Form>
+
+				{/* Noscript fallback: show submit button */}
+				<noscript>
+					<div className="mx-auto flex w-72 max-w-full flex-col justify-center gap-1">
+						<div className="text-center">
+							<h1 className="text-h1">Verify your email</h1>
+							<p className="mt-3 text-body-md text-muted-600">
+								Click the button below to complete verification.
+							</p>
+						</div>
+						<form method="POST" className="mt-6 flex flex-col gap-4">
+							<input
+								type="hidden"
+								name={codeQueryParam}
+								value={code ?? ''}
+							/>
+							<input
+								type="hidden"
+								name={typeQueryParam}
+								value={type ?? ''}
+							/>
+							<input
+								type="hidden"
+								name={targetQueryParam}
+								value={target ?? ''}
+							/>
+							{redirectTo ? (
+								<input
+									type="hidden"
+									name={redirectToQueryParam}
+									value={redirectTo}
+								/>
+							) : null}
+							<button
+								type="submit"
+								className="rounded-lg bg-foreground px-4 py-2 text-background"
+							>
+								Verify
+							</button>
+						</form>
+					</div>
+				</noscript>
+
+				{/* Show errors from auto-submit if any */}
+				{actionData?.result?.error ? (
+					<div className="mt-4">
+						<ErrorList errors={form.errors} id={form.errorId} />
+					</div>
+				) : null}
+			</main>
+		)
+	}
 
 	return (
 		<main className="container flex flex-col justify-center pb-32 pt-20">

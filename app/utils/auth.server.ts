@@ -1,12 +1,6 @@
 import { invariant } from '@epic-web/invariant'
-import {
-	type Prisma,
-	type Connection,
-	type Password,
-	type User,
-} from '@prisma/client'
+import { type Prisma, type Connection, type User } from '@prisma/client'
 import { redirect } from '@remix-run/node'
-import bcrypt from 'bcryptjs'
 import { Authenticator } from 'remix-auth'
 import { safeRedirect } from 'remix-utils/safe-redirect'
 import { getPlanById } from '#app/models/plan/get-plan.js'
@@ -83,45 +77,6 @@ export async function requireAnonymous(request: Request) {
 	}
 }
 
-export async function login({
-	email,
-	password,
-}: {
-	email: User['email']
-	password: string
-}) {
-	const user = await verifyUserPassword({ email, password })
-	if (!user) return null
-	const session = await prisma.session.create({
-		select: { id: true, expirationDate: true, userId: true },
-		data: {
-			expirationDate: getSessionExpirationDate(),
-			userId: user.id,
-		},
-	})
-	return session
-}
-
-export async function resetUserPassword({
-	email,
-	password,
-}: {
-	email: User['email']
-	password: string
-}) {
-	const hashedPassword = await getPasswordHash(password)
-	return prisma.user.update({
-		where: { email },
-		data: {
-			password: {
-				update: {
-					hash: hashedPassword,
-				},
-			},
-		},
-	})
-}
-
 // Create a strongly typed `SessionSelect` object with `satisfies`
 const sessionSelect = {
 	id: true,
@@ -169,17 +124,13 @@ async function createFreeStripeSubscription({
 
 export async function signup({
 	email,
-	password,
 	name,
 	request,
 }: {
 	email: User['email']
 	name: User['name']
-	password: string
 	request: Request
 }) {
-	const hashedPassword = await getPasswordHash(password)
-
 	const session = await prisma.session.create({
 		data: {
 			expirationDate: getSessionExpirationDate(),
@@ -188,11 +139,6 @@ export async function signup({
 					email: email.toLowerCase(),
 					name,
 					roles: { connect: { name: 'user' } },
-					password: {
-						create: {
-							hash: hashedPassword,
-						},
-					},
 				},
 			},
 		},
@@ -209,6 +155,27 @@ export async function signup({
 		})
 	}
 
+	return session
+}
+
+export async function loginWithMagicLink({
+	email,
+}: {
+	email: User['email']
+}) {
+	const user = await prisma.user.findUnique({
+		select: { id: true },
+		where: { email: email.toLowerCase() },
+	})
+	if (!user) return null
+
+	const session = await prisma.session.create({
+		select: { id: true, expirationDate: true, userId: true },
+		data: {
+			expirationDate: getSessionExpirationDate(),
+			userId: user.id,
+		},
+	})
 	return session
 }
 
@@ -288,39 +255,3 @@ export async function logout(
 	})
 }
 
-export async function getPasswordHash(password: string) {
-	const hash = await bcrypt.hash(password, 10)
-	return hash
-}
-
-export async function verifyUserPassword({
-	id,
-	email,
-	password,
-}: {
-	id?: User['id']
-	email?: User['email']
-	password: Password['hash']
-}) {
-	// Ensure that either id or email is provided, but not both
-	if ((!id && !email) || (id && email)) {
-		throw new Error('Either email or id must be provided, but not both')
-	}
-	const where = email ? { email } : { id }
-	const userWithPassword = await prisma.user.findUnique({
-		where,
-		select: { id: true, password: { select: { hash: true } } },
-	})
-
-	if (!userWithPassword || !userWithPassword.password) {
-		return null
-	}
-
-	const isValid = await bcrypt.compare(password, userWithPassword.password.hash)
-
-	if (!isValid) {
-		return null
-	}
-
-	return { id: userWithPassword.id }
-}

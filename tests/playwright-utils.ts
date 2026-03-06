@@ -2,7 +2,6 @@ import { test as base } from '@playwright/test'
 import { type User as UserModel } from '@prisma/client'
 import * as setCookieParser from 'set-cookie-parser'
 import {
-	getPasswordHash,
 	getSessionExpirationDate,
 	sessionKey,
 } from '#app/utils/auth.server.ts'
@@ -22,7 +21,6 @@ export * from './db-utils.ts'
 type GetOrInsertUserOptions = {
 	id?: string
 	email?: UserModel['email']
-	password?: string
 }
 
 type User = {
@@ -33,7 +31,6 @@ type User = {
 
 async function getOrInsertUser({
 	id,
-	password,
 	email,
 }: GetOrInsertUserOptions = {}): Promise<User> {
 	const select = { id: true, email: true, name: true }
@@ -44,14 +41,12 @@ async function getOrInsertUser({
 		})
 	} else {
 		const userData = createUser()
-		password ??= userData.email
 		email ??= userData.email
 		return await prisma.user.create({
 			select,
 			data: {
 				...userData,
 				email,
-				password: { create: { hash: await getPasswordHash(password) } },
 				roles: { connect: { name: 'user' } },
 			},
 		})

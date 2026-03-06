@@ -9,13 +9,16 @@ import {
 } from '@remix-run/node'
 import { Form, useActionData, useLoaderData } from '@remix-run/react'
 import { z } from 'zod'
-import {
-	prepareVerification,
-	requireRecentVerification,
-} from '#app/routes/_auth+/verify.server.ts'
+import { prepareVerification } from '#app/routes/_auth+/verify.server.ts'
 import { StatusButton } from '#app/ui/components/buttons/status-button.tsx'
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from '#app/ui/components/data-display/card.tsx'
 import { ErrorList, Field } from '#app/ui/components/forms.tsx'
-import { Icon } from '#app/ui/components/media/icon.tsx'
 import { requireUserId } from '#app/utils/auth.server.ts'
 import { appName } from '#app/utils/constants.ts'
 import { prisma } from '#app/utils/db.server.ts'
@@ -24,10 +27,8 @@ import { useIsPending } from '#app/utils/misc.tsx'
 import { EmailSchema } from '#app/utils/user-validation.ts'
 import { verifySessionStorage } from '#app/utils/verification.server.ts'
 import { EmailChangeEmail } from './profile.change-email.server.tsx'
-import { type BreadcrumbHandle } from './profile.tsx'
 
-export const handle: BreadcrumbHandle & SEOHandle = {
-	breadcrumb: <Icon name="envelope-closed">Change Email</Icon>,
+export const handle: SEOHandle = {
 	getSitemapEntries: () => null,
 }
 
@@ -38,7 +39,6 @@ const ChangeEmailSchema = z.object({
 })
 
 export async function loader({ request }: LoaderFunctionArgs) {
-	await requireRecentVerification(request)
 	const userId = await requireUserId(request)
 	const user = await prisma.user.findUnique({
 		where: { id: userId },
@@ -120,32 +120,37 @@ export default function ChangeEmailIndex() {
 
 	const isPending = useIsPending()
 	return (
-		<div>
-			<h1 className="text-h1">Change Email</h1>
-			<p>You will receive an email at the new email address to confirm.</p>
-			<p>
-				An email notice will also be sent to your old address {data.user.email}.
-			</p>
-			<div className="mx-auto mt-5 max-w-sm">
-				<Form method="POST" {...getFormProps(form)}>
-					<Field
-						labelProps={{ children: 'New Email' }}
-						inputProps={{
-							...getInputProps(fields.email, { type: 'email' }),
-							autoComplete: 'email',
-						}}
-						errors={fields.email.errors}
-					/>
-					<ErrorList id={form.errorId} errors={form.errors} />
-					<div>
-						<StatusButton
-							status={isPending ? 'pending' : form.status ?? 'idle'}
-						>
-							Send Confirmation
-						</StatusButton>
-					</div>
-				</Form>
-			</div>
-		</div>
+		<Card>
+			<CardHeader>
+				<CardTitle>Change Email</CardTitle>
+				<CardDescription>
+					You will receive an email at the new email address to confirm. An
+					email notice will also be sent to your old address{' '}
+					{data.user.email}.
+				</CardDescription>
+			</CardHeader>
+			<CardContent>
+				<div className="mx-auto max-w-sm">
+					<Form method="POST" {...getFormProps(form)}>
+						<Field
+							labelProps={{ children: 'New Email' }}
+							inputProps={{
+								...getInputProps(fields.email, { type: 'email' }),
+								autoComplete: 'email',
+							}}
+							errors={fields.email.errors}
+						/>
+						<ErrorList id={form.errorId} errors={form.errors} />
+						<div>
+							<StatusButton
+								status={isPending ? 'pending' : form.status ?? 'idle'}
+							>
+								Send Confirmation
+							</StatusButton>
+						</div>
+					</Form>
+				</div>
+			</CardContent>
+		</Card>
 	)
 }

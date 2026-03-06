@@ -3,20 +3,12 @@ import { parseWithZod } from '@conform-to/zod'
 import { json } from '@remix-run/node'
 import { z } from 'zod'
 import { handleVerification as handleChangeEmailVerification } from '#app/routes/settings+/profile.change-email.server.tsx'
-import { twoFAVerificationType } from '#app/routes/settings+/profile.two-factor.tsx'
-import { requireUserId } from '#app/utils/auth.server.ts'
 import { prisma } from '#app/utils/db.server.ts'
 import { ensurePrimary } from '#app/utils/litefs.server.ts'
 import { getDomainUrl } from '#app/utils/misc.tsx'
-import { redirectWithToast } from '#app/utils/toast.server.ts'
 import { generateTOTP, verifyTOTP } from '#app/utils/totp.server.ts'
-import { type twoFAVerifyVerificationType } from '../settings+/profile.two-factor.verify.tsx'
-import {
-	handleVerification as handleLoginTwoFactorVerification,
-	shouldRequestTwoFA,
-} from './login.server.ts'
+import { handleVerification as handleMagicLinkVerification } from './magic-link.server.ts'
 import { handleVerification as handleOnboardingVerification } from './onboarding.server.ts'
-import { handleVerification as handleResetPasswordVerification } from './reset-password.server.ts'
 import {
 	VerifySchema,
 	codeQueryParam,
@@ -56,22 +48,22 @@ export function getRedirectToUrl({
 	return redirectToUrl
 }
 
-export async function requireRecentVerification(request: Request) {
-	const userId = await requireUserId(request)
-	const shouldReverify = await shouldRequestTwoFA(request)
-	if (shouldReverify) {
-		const reqUrl = new URL(request.url)
-		const redirectUrl = getRedirectToUrl({
-			request,
-			target: userId,
-			type: twoFAVerificationType,
-			redirectTo: reqUrl.pathname + reqUrl.search,
-		})
-		throw await redirectWithToast(redirectUrl.toString(), {
-			title: 'Please Reverify',
-			description: 'Please reverify your account before proceeding',
-		})
-	}
+const VERIFICATION_COOLDOWN_SECONDS = 60
+
+export async function isVerificationCooldownActive({
+	target,
+	type,
+}: {
+	target: string
+	type: VerificationTypes
+}): Promise<boolean> {
+	const existing = await prisma.verification.findUnique({
+		where: { target_type: { target, type } },
+		select: { createdAt: true },
+	})
+	if (!existing) return false
+	const elapsedMs = Date.now() - existing.createdAt.getTime()
+	return elapsedMs < VERIFICATION_COOLDOWN_SECONDS * 1000
 }
 
 export async function prepareVerification({
@@ -79,14 +71,16 @@ export async function prepareVerification({
 	request,
 	type,
 	target,
+	redirectTo,
 }: {
 	period: number
 	request: Request
 	type: VerificationTypes
 	target: string
+	redirectTo?: string
 }) {
-	const verifyUrl = getRedirectToUrl({ request, type, target })
-	const redirectTo = new URL(verifyUrl.toString())
+	const verifyUrl = getRedirectToUrl({ request, type, target, redirectTo })
+	const redirectToVerifyPage = new URL(verifyUrl.toString())
 
 	const { otp, ...verificationConfig } = generateTOTP({
 		algorithm: 'SHA256',
@@ -94,6 +88,7 @@ export async function prepareVerification({
 		charSet: 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789',
 		period,
 	})
+	const now = new Date()
 	const verificationData = {
 		type,
 		target,
@@ -102,14 +97,14 @@ export async function prepareVerification({
 	}
 	await prisma.verification.upsert({
 		where: { target_type: { target, type } },
-		create: verificationData,
-		update: verificationData,
+		create: { ...verificationData, createdAt: now },
+		update: { ...verificationData, createdAt: now },
 	})
 
 	// add the otp to the url we'll email the user.
 	verifyUrl.searchParams.set(codeQueryParam, otp)
 
-	return { otp, redirectTo, verifyUrl }
+	return { otp, redirectTo: redirectToVerifyPage, verifyUrl }
 }
 
 export async function isCodeValid({
@@ -118,7 +113,7 @@ export async function isCodeValid({
 	target,
 }: {
 	code: string
-	type: VerificationTypes | typeof twoFAVerifyVerificationType
+	type: VerificationTypes
 	target: string
 }) {
 	const verification = await prisma.verification.findUnique({
@@ -186,10 +181,6 @@ export async function validateRequest(
 	}
 
 	switch (submissionValue[typeQueryParam]) {
-		case 'reset-password': {
-			await deleteVerification()
-			return handleResetPasswordVerification({ request, body, submission })
-		}
 		case 'onboarding': {
 			await deleteVerification()
 			return handleOnboardingVerification({ request, body, submission })
@@ -198,8 +189,9 @@ export async function validateRequest(
 			await deleteVerification()
 			return handleChangeEmailVerification({ request, body, submission })
 		}
-		case '2fa': {
-			return handleLoginTwoFactorVerification({ request, body, submission })
+		case 'magic-link': {
+			await deleteVerification()
+			return handleMagicLinkVerification({ request, body, submission })
 		}
 	}
 }

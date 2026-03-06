@@ -56,7 +56,6 @@ export default defineConfig({
 			'@sentry/remix',
 			'@tanstack/*',
 			'address',
-			'bcryptjs',
 			'better-sqlite3',
 			'chalk',
 			'class-variance-authority',
