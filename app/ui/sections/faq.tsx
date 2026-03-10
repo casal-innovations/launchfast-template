@@ -4,6 +4,7 @@ import {
 	AccordionTrigger,
 	AccordionContent,
 } from '../components/disclosure/accordion'
+import { Container } from '../components/layout/container'
 import { Flex } from '../components/layout/flex'
 import { A } from '../components/typography/a'
 import { H2 } from '../components/typography/h2'
@@ -14,6 +15,7 @@ import { Ul } from '../components/typography/ul'
 
 export const FAQ = () => {
 	return (
+		<Container>
 		<Flex orientation="vertical" className="pb-48">
 			<H2 className="mx-auto text-center">FAQ</H2>
 			<Lead className="mx-auto text-center">
@@ -168,5 +170,6 @@ export const FAQ = () => {
 				</AccordionItem>
 			</Accordion>
 		</Flex>
+		</Container>
 	)
 }

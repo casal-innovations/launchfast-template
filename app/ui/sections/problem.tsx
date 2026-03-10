@@ -1,3 +1,4 @@
+import { Container } from '../components/layout/container'
 import { Flex } from '../components/layout/flex'
 import { H2 } from '../components/typography/h2'
 import { H4 } from '../components/typography/h4'
@@ -6,6 +7,7 @@ import { P } from '../components/typography/p'
 
 export const Problem = () => {
 	return (
+		<Container>
 		<Flex orientation="vertical" gap="15" className="pb-48">
 			<div>
 				<H2 className="mx-auto text-center">Struggling with Project Setup?</H2>
@@ -71,5 +73,6 @@ export const Problem = () => {
 				</div>
 			</Flex>
 		</Flex>
+		</Container>
 	)
 }

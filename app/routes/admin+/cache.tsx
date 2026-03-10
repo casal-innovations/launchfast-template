@@ -16,8 +16,16 @@ import {
 } from '@remix-run/react'
 import { Button } from '#app/ui/components/buttons/button.js'
 import { GeneralErrorBoundary } from '#app/ui/components/custom/error-boundary.tsx'
-import { Field } from '#app/ui/components/forms.tsx'
-import { Spacer } from '#app/ui/components/layout/spacer.tsx'
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from '#app/ui/components/data-display/card.tsx'
+import { Label } from '#app/ui/components/forms/label.tsx'
+import { Input } from '#app/ui/components/input.tsx'
+import { Icon } from '#app/ui/components/media/icon.tsx'
 import {
 	cache,
 	getAllCacheKeys,
@@ -102,97 +110,220 @@ export default function CacheAdminRoute() {
 		submit(form)
 	}, 400)
 
+	const totalResults =
+		data.cacheKeys.sqlite.length + data.cacheKeys.lru.length
+
 	return (
-		<div className="container">
-			<h1 className="text-h1">Cache Admin</h1>
-			<Spacer size="2xs" />
-			<Form
-				method="get"
-				className="flex flex-col gap-4"
-				onChange={e => handleFormChange(e.currentTarget)}
-			>
-				<div className="flex-1">
-					<div className="flex flex-1 gap-4">
-						<button
-							type="submit"
-							className="flex h-16 items-center justify-center"
-						>
-							🔎
-						</button>
-						<Field
-							className="flex-1"
-							labelProps={{ children: 'Search' }}
-							inputProps={{
-								type: 'search',
-								name: 'query',
-								defaultValue: query,
-							}}
-						/>
-						<div className="flex h-16 w-14 items-center text-lg font-medium text-muted-600">
-							<span title="Total results shown">
-								{data.cacheKeys.sqlite.length + data.cacheKeys.lru.length}
+		<div className="container mx-auto max-w-4xl px-4 py-8">
+			<div className="mb-8">
+				<h1 className="text-2xl font-bold">Cache Admin</h1>
+				<p className="mt-1 text-sm text-muted-600">
+					Inspect and delete cached data. Useful for forcing a
+					re-fetch when cached data becomes stale.
+				</p>
+			</div>
+
+			<Card className="mb-6">
+				<CardContent className="pt-6">
+					<details>
+						<summary className="cursor-pointer text-sm font-medium">
+							How caching works
+						</summary>
+						<div className="mt-3 space-y-3 text-sm text-muted-600">
+							<p>
+								Data enters the cache through{' '}
+								<code className="rounded bg-muted-200 px-1.5 py-0.5 font-mono text-xs">
+									cachified()
+								</code>{' '}
+								calls in your server code. You provide a cache key, a
+								backend (LRU or SQLite), TTL/SWR settings, and a{' '}
+								<code className="rounded bg-muted-200 px-1.5 py-0.5 font-mono text-xs">
+									getFreshValue
+								</code>{' '}
+								function that fetches the data on cache miss.
+							</p>
+							<div className="grid gap-3 sm:grid-cols-2">
+								<div className="rounded-md border p-3">
+									<p className="font-medium text-foreground">
+										LRU Cache (in-memory)
+									</p>
+									<p className="mt-1 text-xs">
+										Fast reads, lost on restart. Use for hot data
+										with short TTLs.
+									</p>
+								</div>
+								<div className="rounded-md border p-3">
+									<p className="font-medium text-foreground">
+										SQLite Cache (persistent)
+									</p>
+									<p className="mt-1 text-xs">
+										Survives restarts. Use for expensive external API
+										calls with long TTLs or stale-while-revalidate.
+									</p>
+								</div>
+							</div>
+							<p className="text-xs">
+								<strong className="text-foreground">When to cache:</strong>{' '}
+								external API calls, expensive computations, data that
+								doesn&apos;t change on every request.
+								See{' '}
+								<code className="rounded bg-muted-200 px-1 py-0.5 font-mono text-xs">
+									app/utils/providers/github.server.ts
+								</code>{' '}
+								for a real example using{' '}
+								<code className="rounded bg-muted-200 px-1 py-0.5 font-mono text-xs">
+									@epic-web/cachified
+								</code>
+								.
+							</p>
+						</div>
+					</details>
+				</CardContent>
+			</Card>
+
+			<Card className="mb-6">
+				<CardContent className="pt-6">
+					<Form
+						method="get"
+						className="flex flex-col gap-4"
+						onChange={e => handleFormChange(e.currentTarget)}
+					>
+						<div className="flex items-center gap-3">
+							<div className="flex-1">
+								<Label htmlFor="cache-search">Search</Label>
+								<div className="relative mt-1">
+									<Icon
+										name="magnifying-glass"
+										className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-500"
+									/>
+									<Input
+										id="cache-search"
+										type="search"
+										name="query"
+										defaultValue={query}
+										placeholder="Filter cache keys..."
+										className="pl-9"
+									/>
+								</div>
+							</div>
+							<span
+								className="mt-6 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-muted-200 px-2 text-xs font-medium text-muted-700"
+								title="Total results"
+							>
+								{totalResults}
 							</span>
 						</div>
-					</div>
-				</div>
-				<div className="flex flex-wrap items-center gap-4">
-					<Field
-						labelProps={{
-							children: 'Limit',
-						}}
-						inputProps={{
-							name: 'limit',
-							defaultValue: limit,
-							type: 'number',
-							step: '1',
-							min: '1',
-							max: '10000',
-							placeholder: 'results limit',
-						}}
-					/>
-					<select name="instance" defaultValue={instance}>
-						{Object.entries(data.instances).map(([inst, region]) => (
-							<option key={inst} value={inst}>
-								{[
-									inst,
-									`(${region})`,
-									inst === data.currentInstanceInfo.currentInstance
-										? '(current)'
-										: '',
-									inst === data.currentInstanceInfo.primaryInstance
-										? ' (primary)'
-										: '',
-								]
-									.filter(Boolean)
-									.join(' ')}
-							</option>
-						))}
-					</select>
-				</div>
-			</Form>
-			<Spacer size="2xs" />
-			<div className="flex flex-col gap-4">
-				<h2 className="text-h2">LRU Cache:</h2>
-				{data.cacheKeys.lru.map(key => (
-					<CacheKeyRow
-						key={key}
-						cacheKey={key}
-						instance={instance}
-						type="lru"
-					/>
-				))}
-			</div>
-			<Spacer size="3xs" />
-			<div className="flex flex-col gap-4">
-				<h2 className="text-h2">SQLite Cache:</h2>
-				{data.cacheKeys.sqlite.map(key => (
-					<CacheKeyRow
-						key={key}
-						cacheKey={key}
-						instance={instance}
-						type="sqlite"
-					/>
-				))}
+						<div className="flex items-center gap-4">
+							<div className="w-24">
+								<Label htmlFor="cache-limit">Limit</Label>
+								<Input
+									id="cache-limit"
+									name="limit"
+									defaultValue={limit}
+									type="number"
+									step="1"
+									min="1"
+									max="10000"
+									className="mt-1"
+								/>
+							</div>
+							<div className="flex-1">
+								<Label htmlFor="instance-select">Instance</Label>
+								<select
+									id="instance-select"
+									name="instance"
+									defaultValue={instance}
+									className="mt-1 flex h-10 w-full appearance-none rounded-md border border-brand-border bg-background bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px_16px] bg-[right_12px_center] bg-no-repeat px-3 pr-9 text-sm"
+								>
+									{Object.entries(data.instances).map(([inst, region]) => (
+										<option key={inst} value={inst}>
+											{[
+												inst,
+												`(${region})`,
+												inst === data.currentInstanceInfo.currentInstance
+													? '(current)'
+													: '',
+												inst === data.currentInstanceInfo.primaryInstance
+													? '(primary)'
+													: '',
+											]
+												.filter(Boolean)
+												.join(' ')}
+										</option>
+									))}
+								</select>
+							</div>
+						</div>
+					</Form>
+				</CardContent>
+			</Card>
+
+			<div className="flex flex-col gap-6">
+				<Card>
+					<CardHeader>
+						<div className="flex items-center justify-between">
+							<div>
+								<CardTitle className="text-lg">LRU Cache</CardTitle>
+								<CardDescription>
+									Volatile — cleared on server restart.
+								</CardDescription>
+							</div>
+							<span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-muted-200 px-2 text-xs font-medium text-muted-700">
+								{data.cacheKeys.lru.length}
+							</span>
+						</div>
+					</CardHeader>
+					<CardContent>
+						{data.cacheKeys.lru.length > 0 ? (
+							<div className="flex flex-col gap-2">
+								{data.cacheKeys.lru.map(key => (
+									<CacheKeyRow
+										key={key}
+										cacheKey={key}
+										instance={instance}
+										type="lru"
+									/>
+								))}
+							</div>
+						) : (
+							<p className="text-sm text-muted-500">No LRU cache entries.</p>
+						)}
+					</CardContent>
+				</Card>
+
+				<Card>
+					<CardHeader>
+						<div className="flex items-center justify-between">
+							<div>
+								<CardTitle className="text-lg">SQLite Cache</CardTitle>
+								<CardDescription>
+									Persistent — survives server restarts.
+								</CardDescription>
+							</div>
+							<span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-muted-200 px-2 text-xs font-medium text-muted-700">
+								{data.cacheKeys.sqlite.length}
+							</span>
+						</div>
+					</CardHeader>
+					<CardContent>
+						{data.cacheKeys.sqlite.length > 0 ? (
+							<div className="flex flex-col gap-2">
+								{data.cacheKeys.sqlite.map(key => (
+									<CacheKeyRow
+										key={key}
+										cacheKey={key}
+										instance={instance}
+										type="sqlite"
+									/>
+								))}
+							</div>
+						) : (
+							<p className="text-sm text-muted-500">
+								No SQLite cache entries.
+							</p>
+						)}
+					</CardContent>
+				</Card>
 			</div>
 		</div>
 	)
@@ -212,24 +343,28 @@ function CacheKeyRow({
 	const encodedKey = encodeURIComponent(cacheKey)
 	const valuePage = `/admin/cache/${type}/${encodedKey}?instance=${instance}`
 	return (
-		<div className="flex items-center gap-2 font-mono">
+		<div className="flex items-center gap-3 rounded-md border bg-white px-3 py-2 dark:bg-muted-50">
 			<fetcher.Form method="POST">
 				<input type="hidden" name="cacheKey" value={cacheKey} />
 				<input type="hidden" name="instance" value={instance} />
 				<input type="hidden" name="type" value={type} />
 				<Button
 					size="sm"
-					variant="secondary"
+					variant="destructive"
 					{...dc.getButtonProps({ type: 'submit' })}
 				>
 					{fetcher.state === 'idle'
 						? dc.doubleCheck
-							? 'You sure?'
+							? 'Sure?'
 							: 'Delete'
 						: 'Deleting...'}
 				</Button>
 			</fetcher.Form>
-			<Link reloadDocument to={valuePage}>
+			<Link
+				reloadDocument
+				to={valuePage}
+				className="min-w-0 flex-1 truncate font-mono text-sm hover:underline"
+			>
 				{cacheKey}
 			</Link>
 		</div>

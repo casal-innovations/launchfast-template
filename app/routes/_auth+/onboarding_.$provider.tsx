@@ -15,6 +15,7 @@ import {
 import {
 	type Params,
 	Form,
+	Link,
 	useActionData,
 	useLoaderData,
 	useSearchParams,
@@ -22,7 +23,7 @@ import {
 import { safeRedirect } from 'remix-utils/safe-redirect'
 import { z } from 'zod'
 import { StatusButton } from '#app/ui/components/buttons/status-button.tsx'
-import { CheckboxField, ErrorList, Field } from '#app/ui/components/forms.tsx'
+import { ErrorList, Field } from '#app/ui/components/forms.tsx'
 import { Spacer } from '#app/ui/components/layout/spacer.tsx'
 import {
 	authenticator,
@@ -46,9 +47,6 @@ export const prefilledProfileKey = 'prefilledProfile'
 const SignupFormSchema = z.object({
 	imageUrl: z.string().optional(),
 	name: NameSchema,
-	agreeToTermsOfServiceAndPrivacyPolicy: z.boolean({
-		required_error: 'You must agree to the terms of service and privacy policy',
-	}),
 	redirectTo: z.string().optional(),
 })
 
@@ -182,9 +180,9 @@ export default function OnboardingProviderRoute() {
 		<div className="container flex min-h-full flex-col justify-center pb-32 pt-20">
 			<div className="mx-auto w-full max-w-lg">
 				<div className="flex flex-col gap-3 text-center">
-					<h1 className="text-h1">Welcome aboard {data.email}!</h1>
+					<h1 className="text-h1">Welcome aboard</h1>
 					<p className="text-body-md text-muted-600">
-						Please enter your details.
+						{data.email}, please enter your details.
 					</p>
 				</div>
 				<Spacer size="xs" />
@@ -215,25 +213,13 @@ export default function OnboardingProviderRoute() {
 						errors={fields.name.errors}
 					/>
 
-					<CheckboxField
-						labelProps={{
-							htmlFor: fields.agreeToTermsOfServiceAndPrivacyPolicy.id,
-							children:
-								'Do you agree to our Terms of Service and Privacy Policy?',
-						}}
-						buttonProps={getInputProps(
-							fields.agreeToTermsOfServiceAndPrivacyPolicy,
-							{ type: 'checkbox' },
-						)}
-						errors={fields.agreeToTermsOfServiceAndPrivacyPolicy.errors}
-					/>
 					{redirectTo ? (
 						<input type="hidden" name="redirectTo" value={redirectTo} />
 					) : null}
 
 					<ErrorList errors={form.errors} id={form.errorId} />
 
-					<div className="flex items-center justify-between gap-6">
+					<div className="flex flex-col gap-3">
 						<StatusButton
 							className="w-full"
 							status={isPending ? 'pending' : form.status ?? 'idle'}
@@ -242,6 +228,17 @@ export default function OnboardingProviderRoute() {
 						>
 							Continue
 						</StatusButton>
+						<p className="text-center text-body-xs text-muted-600">
+							By clicking Continue, you agree to our{' '}
+							<Link to="/tos" target="_blank" className="underline">
+								Terms of Service
+							</Link>{' '}
+							and{' '}
+							<Link to="/privacy" target="_blank" className="underline">
+								Privacy Policy
+							</Link>
+							.
+						</p>
 					</div>
 				</Form>
 			</div>

@@ -1,69 +1,88 @@
-import { invariantResponse } from '@epic-web/invariant'
 import { type SEOHandle } from '@nasa-gcn/remix-seo'
 import { json, type LoaderFunctionArgs } from '@remix-run/node'
-import { Link, Outlet, useMatches } from '@remix-run/react'
-import { z } from 'zod'
-import { Spacer } from '#app/ui/components/layout/spacer.tsx'
+import { Outlet, useLoaderData } from '@remix-run/react'
+import { Button } from '#app/ui/components/buttons/button.js'
+import { AccountNav } from '#app/ui/components/custom/account-nav.tsx'
 import { Icon } from '#app/ui/components/media/icon.tsx'
+import {
+	Sheet,
+	SheetContent,
+	SheetHeader,
+	SheetTitle,
+	SheetTrigger,
+} from '#app/ui/components/overlays/sheet.tsx'
 import { requireUserId } from '#app/utils/auth.server.ts'
 import { prisma } from '#app/utils/db.server.ts'
-import { cn } from '#app/utils/tailwind-merge.ts'
+import { getUserImgSrc } from '#app/utils/misc.tsx'
 
-export const BreadcrumbHandle = z.object({ breadcrumb: z.any() })
-export type BreadcrumbHandle = z.infer<typeof BreadcrumbHandle>
-
-export const handle: BreadcrumbHandle & SEOHandle = {
-	breadcrumb: <Icon name="file-text">Edit Profile</Icon>,
+export const handle: SEOHandle = {
 	getSitemapEntries: () => null,
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
 	const userId = await requireUserId(request)
-	const user = await prisma.user.findUnique({
+	const user = await prisma.user.findUniqueOrThrow({
 		where: { id: userId },
+		select: {
+			name: true,
+			email: true,
+			image: { select: { id: true } },
+		},
 	})
-	invariantResponse(user, 'User not found', { status: 404 })
-	return json({})
+	return json({ user })
 }
 
-const BreadcrumbHandleMatch = z.object({
-	handle: BreadcrumbHandle,
-})
-
-export default function EditUserProfile() {
-	const matches = useMatches()
-	const breadcrumbs = matches
-		.map(m => {
-			const result = BreadcrumbHandleMatch.safeParse(m)
-			if (!result.success || !result.data.handle.breadcrumb) return null
-			return (
-				<Link key={m.id} to={m.pathname} className="flex items-center">
-					{result.data.handle.breadcrumb}
-				</Link>
-			)
-		})
-		.filter(Boolean)
+export default function SettingsProfileLayout() {
+	const { user } = useLoaderData<typeof loader>()
 
 	return (
-		<div className="m-auto mb-24 mt-16 max-w-3xl">
-			<div className="container">
-				<ul className="flex gap-3">
-					{breadcrumbs.map((breadcrumb, i, arr) => (
-						<li
-							key={i}
-							className={cn('flex items-center gap-3', {
-								'text-muted-600': i < arr.length - 1,
-							})}
-						>
-							▶️ {breadcrumb}
-						</li>
-					))}
-				</ul>
+		<div className="container mx-auto px-4 py-8 pb-16">
+			<div className="flex flex-col gap-8 lg:flex-row lg:gap-12">
+				<div className="lg:hidden">
+					<Sheet>
+						<SheetTrigger asChild>
+							<Button variant="outline" size="sm" className="gap-2">
+								<Icon name="hamburger-menu" className="h-4 w-4" />
+								Menu
+							</Button>
+						</SheetTrigger>
+						<SheetContent side="left" className="w-72">
+							<SheetHeader className="mb-6">
+								<SheetTitle>Account Settings</SheetTitle>
+							</SheetHeader>
+							<div className="mb-6 flex items-center gap-3 rounded-lg bg-muted-100 p-3">
+								<img
+									src={getUserImgSrc(user.image?.id)}
+									alt={user.name ?? 'User'}
+									className="h-10 w-10 rounded-full object-cover"
+								/>
+								<p className="min-w-0 flex-1 truncate text-sm font-medium">
+									{user.email}
+								</p>
+							</div>
+							<AccountNav />
+						</SheetContent>
+					</Sheet>
+				</div>
+
+				<aside className="hidden w-64 shrink-0 lg:block">
+					<div className="mb-6 flex items-center gap-3 rounded-lg border border-muted-200 bg-muted-50 p-4">
+						<img
+							src={getUserImgSrc(user.image?.id)}
+							alt={user.name ?? 'User'}
+							className="h-12 w-12 rounded-full object-cover"
+						/>
+						<p className="min-w-0 flex-1 truncate text-sm font-medium">
+							{user.email}
+						</p>
+					</div>
+					<AccountNav />
+				</aside>
+
+				<main className="min-w-0 flex-1">
+					<Outlet />
+				</main>
 			</div>
-			<Spacer size="xs" />
-			<main className="mx-auto bg-muted-200 px-6 py-8 md:container md:rounded-3xl">
-				<Outlet />
-			</main>
 		</div>
 	)
 }

@@ -12,6 +12,7 @@ import {
 } from '@remix-run/node'
 import {
 	Form,
+	Link,
 	useActionData,
 	useLoaderData,
 	useNavigation,
@@ -20,6 +21,12 @@ import { useState } from 'react'
 import { z } from 'zod'
 import { Button } from '#app/ui/components/buttons/button.js'
 import { StatusButton } from '#app/ui/components/buttons/status-button.tsx'
+import {
+	Card,
+	CardContent,
+	CardHeader,
+	CardTitle,
+} from '#app/ui/components/data-display/card.tsx'
 import { ErrorList } from '#app/ui/components/forms.tsx'
 import { Icon } from '#app/ui/components/media/icon.tsx'
 import { requireUserId } from '#app/utils/auth.server.ts'
@@ -29,10 +36,8 @@ import {
 	useDoubleCheck,
 	useIsPending,
 } from '#app/utils/misc.tsx'
-import { type BreadcrumbHandle } from './profile.tsx'
 
-export const handle: BreadcrumbHandle & SEOHandle = {
-	breadcrumb: <Icon name="avatar">Photo</Icon>,
+export const handle: SEOHandle = {
 	getSitemapEntries: () => null,
 }
 
@@ -136,112 +141,115 @@ export default function PhotoRoute() {
 
 	const isPending = useIsPending()
 	const pendingIntent = isPending ? navigation.formData?.get('intent') : null
-	const lastSubmissionIntent = fields.intent.value
 
 	const [newImageSrc, setNewImageSrc] = useState<string | null>(null)
 
+	function getIntentStatus(intent: string) {
+		if (pendingIntent === intent) return 'pending' as const
+		if (fields.intent.value === intent) return form.status ?? ('idle' as const)
+		return 'idle' as const
+	}
+
 	return (
-		<div>
-			<Form
-				method="POST"
-				encType="multipart/form-data"
-				className="flex flex-col items-center justify-center gap-10"
-				onReset={() => setNewImageSrc(null)}
-				{...getFormProps(form)}
-			>
-				<img
-					src={
-						newImageSrc ?? (data.user ? getUserImgSrc(data.user.image?.id) : '')
-					}
-					className="h-52 w-52 rounded-full object-cover"
-					alt={
-						data.user?.name
-							? `${data.user.name}’s profile photo`
-							: 'Default profile photo'
-					}
-				/>
-				<ErrorList errors={fields.photoFile.errors} id={fields.photoFile.id} />
-				<div className="flex gap-4">
-					{/*
-						We're doing some kinda odd things to make it so this works well
-						without JavaScript. Basically, we're using CSS to ensure the right
-						buttons show up based on the input's "valid" state (whether or not
-						an image has been selected). Progressive enhancement FTW!
-					*/}
-					<input
-						{...getInputProps(fields.photoFile, { type: 'file' })}
-						accept="image/*"
-						className="peer sr-only"
-						required
-						tabIndex={newImageSrc ? -1 : 0}
-						onChange={e => {
-							const file = e.currentTarget.files?.[0]
-							if (file) {
-								const reader = new FileReader()
-								reader.onload = event => {
-									setNewImageSrc(event.target?.result?.toString() ?? null)
-								}
-								reader.readAsDataURL(file)
-							}
-						}}
-					/>
-					<Button
-						asChild
-						className="cursor-pointer peer-valid:hidden peer-focus-within:ring-2 peer-focus-visible:ring-2"
-					>
-						<label htmlFor={fields.photoFile.id}>
-							<Icon name="pencil-1">Change</Icon>
-						</label>
-					</Button>
-					<StatusButton
-						name="intent"
-						value="submit"
-						type="submit"
-						className="peer-invalid:hidden"
-						status={
-							pendingIntent === 'submit'
-								? 'pending'
-								: lastSubmissionIntent === 'submit'
-									? form.status ?? 'idle'
-									: 'idle'
+		<Card>
+			<CardHeader>
+				<Link
+					to="/settings/profile"
+					className="inline-flex items-center gap-1 text-sm text-muted-500 hover:text-muted-700"
+				>
+					<Icon name="arrow-left" className="h-4 w-4" />
+					Back to profile
+				</Link>
+				<CardTitle>Profile photo</CardTitle>
+			</CardHeader>
+			<CardContent>
+				<Form
+					method="POST"
+					encType="multipart/form-data"
+					className="flex flex-col items-center justify-center gap-10"
+					onReset={() => setNewImageSrc(null)}
+					{...getFormProps(form)}
+				>
+					<img
+						src={newImageSrc ?? getUserImgSrc(data.user.image?.id)}
+						className="h-52 w-52 rounded-full object-cover"
+						alt={
+							data.user.name
+								? `${data.user.name}'s profile photo`
+								: 'Default profile photo'
 						}
-					>
-						Save Photo
-					</StatusButton>
-					<Button
-						variant="destructive"
-						className="peer-invalid:hidden"
-						{...form.reset.getButtonProps()}
-					>
-						<Icon name="trash">Reset</Icon>
-					</Button>
-					{data.user.image?.id ? (
-						<StatusButton
-							className="peer-valid:hidden"
-							variant="destructive"
-							{...doubleCheckDeleteImage.getButtonProps({
-								type: 'submit',
-								name: 'intent',
-								value: 'delete',
-							})}
-							status={
-								pendingIntent === 'delete'
-									? 'pending'
-									: lastSubmissionIntent === 'delete'
-										? form.status ?? 'idle'
-										: 'idle'
-							}
+					/>
+					<ErrorList errors={fields.photoFile.errors} id={fields.photoFile.id} />
+					<div className="flex gap-4">
+						{/*
+							We're doing some kinda odd things to make it so this works well
+							without JavaScript. Basically, we're using CSS to ensure the right
+							buttons show up based on the input's "valid" state (whether or not
+							an image has been selected). Progressive enhancement FTW!
+						*/}
+						<input
+							{...getInputProps(fields.photoFile, { type: 'file' })}
+							accept="image/*"
+							className="peer sr-only"
+							required
+							tabIndex={newImageSrc ? -1 : 0}
+							onChange={e => {
+								const file = e.currentTarget.files?.[0]
+								if (file) {
+									const reader = new FileReader()
+									reader.onload = event => {
+										setNewImageSrc(event.target?.result?.toString() ?? null)
+									}
+									reader.readAsDataURL(file)
+								}
+							}}
+						/>
+						<Button
+							asChild
+							className="cursor-pointer peer-valid:hidden peer-focus-within:ring-2 peer-focus-visible:ring-2"
 						>
-							<Icon name="trash">
-								{doubleCheckDeleteImage.doubleCheck
-									? 'Are you sure?'
-									: 'Delete'}
-							</Icon>
+							<label htmlFor={fields.photoFile.id}>
+								<Icon name="pencil-1">Change</Icon>
+							</label>
+						</Button>
+						<StatusButton
+							name="intent"
+							value="submit"
+							type="submit"
+							className="peer-invalid:hidden"
+							status={getIntentStatus('submit')}
+						>
+							Save Photo
 						</StatusButton>
-					) : null}
-				</div>
-				<ErrorList errors={form.errors} />
-			</Form>
-		</div>
+						<Button
+							variant="destructive"
+							className="peer-invalid:hidden"
+							{...form.reset.getButtonProps()}
+						>
+							<Icon name="trash">Reset</Icon>
+						</Button>
+						{data.user.image?.id ? (
+							<StatusButton
+								className="peer-valid:hidden"
+								variant="destructive"
+								{...doubleCheckDeleteImage.getButtonProps({
+									type: 'submit',
+									name: 'intent',
+									value: 'delete',
+								})}
+								status={getIntentStatus('delete')}
+							>
+								<Icon name="trash">
+									{doubleCheckDeleteImage.doubleCheck
+										? 'Are you sure?'
+										: 'Delete'}
+								</Icon>
+							</StatusButton>
+						) : null}
+					</div>
+					<ErrorList errors={form.errors} />
+				</Form>
+			</CardContent>
+		</Card>
 	)
 }

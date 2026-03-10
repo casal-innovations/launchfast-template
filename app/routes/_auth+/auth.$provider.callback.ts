@@ -144,13 +144,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 		email: normalizeEmail(profile.email),
 	})
 	verifySession.set(providerIdKey, profile.id)
-	const onboardingRedirect = [
-		`/onboarding/${providerName}`,
-		redirectTo ? new URLSearchParams({ redirectTo }) : null,
-	]
-		.filter(Boolean)
-		.join('?')
-	return redirect(onboardingRedirect, {
+	const onboardingPath = `/onboarding/${providerName}`
+	const onboardingUrl = redirectTo
+		? `${onboardingPath}?${new URLSearchParams({ redirectTo })}`
+		: onboardingPath
+	return redirect(onboardingUrl, {
 		headers: combineHeaders(
 			{ 'set-cookie': await verifySessionStorage.commitSession(verifySession) },
 			destroyRedirectTo,
@@ -175,7 +173,7 @@ async function makeSession(
 		},
 	})
 	return handleNewSession(
-		{ request, session, redirectTo, remember: true },
+		{ request, session, redirectTo },
 		{ headers: combineHeaders(responseInit?.headers, destroyRedirectTo) },
 	)
 }

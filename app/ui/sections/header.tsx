@@ -17,6 +17,14 @@ export const Header = () => {
 				<nav className="flex flex-wrap items-center justify-between gap-4 sm:flex-nowrap md:gap-8">
 					<Logo />
 					<div className="flex items-center gap-10">
+						<div className="hidden items-center gap-6 sm:flex">
+							<Link to="/pricing" className="text-sm font-medium text-muted-700 hover:text-foreground">
+								Pricing
+							</Link>
+							<Link to="/support" className="text-sm font-medium text-muted-700 hover:text-foreground">
+								Support
+							</Link>
+						</div>
 						<ThemeSwitch userPreference={data.requestInfo.userPrefs.theme} />
 						{user ? (
 							<UserDropdown />

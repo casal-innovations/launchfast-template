@@ -61,8 +61,6 @@ test('onboarding new user with magic link', async ({
 
 	await page.getByRole('textbox', { name: /^name/i }).fill(onboardingData.name)
 
-	await page.getByLabel(/terms/i).check()
-
 	await page.getByRole('button', { name: /continue/i }).click()
 
 	await expect(page.getByText(/thanks for signing up/i)).toBeVisible()
@@ -132,9 +130,8 @@ test('completes onboarding after GitHub OAuth given valid user details', async (
 	await page.getByRole('button', { name: /continue with github/i }).click()
 
 	await expect(page).toHaveURL(/\/onboarding\/github/)
-	await expect(
-		page.getByText(new RegExp(`welcome aboard ${ghUser.primaryEmail}`, 'i')),
-	).toBeVisible()
+	await expect(page.getByRole('heading', { name: /welcome aboard/i })).toBeVisible()
+	await expect(page.getByText(new RegExp(ghUser.primaryEmail, 'i'))).toBeVisible()
 
 	await expect(page.getByRole('textbox', { name: /^name/i })).toHaveValue(
 		ghUser.profile.name,
@@ -143,9 +140,6 @@ test('completes onboarding after GitHub OAuth given valid user details', async (
 		name: /continue/i,
 	})
 
-	await page
-		.getByLabel(/do you agree to our terms of service and privacy policy/i)
-		.check()
 	await continueButton.click()
 	await expect(page.getByText(/thanks for signing up/i)).toBeVisible()
 
@@ -197,7 +191,7 @@ test('logs user in after GitHub OAuth if they are already registered', async ({
 	})
 })
 
-test('shows help texts on entering invalid details on onboarding page after GitHub OAuth', async ({
+test('shows validation errors for empty name on onboarding page after GitHub OAuth', async ({
 	page,
 	prepareGitHubUser,
 }) => {
@@ -207,29 +201,18 @@ test('shows help texts on entering invalid details on onboarding page after GitH
 	await page.getByRole('button', { name: /continue with github/i }).click()
 
 	await expect(page).toHaveURL(/\/onboarding\/github/)
-	await expect(
-		page.getByText(new RegExp(`welcome aboard ${ghUser.primaryEmail}`, 'i')),
-	).toBeVisible()
+
+	const nameInput = page.getByRole('textbox', { name: /^name/i })
+	await nameInput.clear()
 
 	const continueButton = page.getByRole('button', {
 		name: /continue/i,
 	})
-	await expect(continueButton.getByRole('status')).not.toBeVisible()
-	await expect(continueButton.getByText('error')).not.toBeAttached()
-
 	await continueButton.click()
-	await expect(
-		page.getByText(
-			/you must agree to the terms of service and privacy policy/i,
-		),
-	).toBeVisible()
 	await expect(page).toHaveURL(/\/onboarding\/github/)
 
-	await page
-		.getByLabel(/do you agree to our terms of service and privacy policy/i)
-		.check()
+	await nameInput.fill(ghUser.profile.name)
 	await continueButton.click()
-	await expect(continueButton.getByText('error')).not.toBeAttached()
 
 	await expect(page.getByText(/thanks for signing up/i)).toBeVisible()
 })

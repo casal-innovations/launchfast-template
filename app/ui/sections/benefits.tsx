@@ -1,3 +1,4 @@
+import { Container } from '../components/layout/container'
 import { Flex } from '../components/layout/flex'
 import { H2 } from '../components/typography/h2'
 import { H4 } from '../components/typography/h4'
@@ -5,6 +6,7 @@ import { Lead } from '../components/typography/lead'
 
 export const Benefits = () => {
 	return (
+		<Container>
 		<Flex orientation="vertical" gap="15" className="pb-48">
 			<div>
 				<H2 className="mx-auto text-center">Why Choose LaunchFast?</H2>
@@ -68,5 +70,6 @@ export const Benefits = () => {
 				</div>
 			</Flex>
 		</Flex>
+		</Container>
 	)
 }

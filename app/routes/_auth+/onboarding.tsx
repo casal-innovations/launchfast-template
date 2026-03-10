@@ -9,6 +9,7 @@ import {
 } from '@remix-run/node'
 import {
 	Form,
+	Link,
 	useActionData,
 	useLoaderData,
 	useSearchParams,
@@ -18,7 +19,7 @@ import { safeRedirect } from 'remix-utils/safe-redirect'
 import { z } from 'zod'
 import { stripe } from '#app/services/stripe/stripe.server.ts'
 import { StatusButton } from '#app/ui/components/buttons/status-button.tsx'
-import { CheckboxField, ErrorList, Field } from '#app/ui/components/forms.tsx'
+import { ErrorList, Field } from '#app/ui/components/forms.tsx'
 import { Spacer } from '#app/ui/components/layout/spacer.tsx'
 import { H1 } from '#app/ui/components/typography/h1.js'
 import { requireAnonymous, sessionKey, signup } from '#app/utils/auth.server.ts'
@@ -34,10 +35,6 @@ export const onboardingEmailSessionKey = 'onboardingEmail'
 
 const SignupFormSchema = z.object({
 	name: NameSchema,
-	agreeToTermsOfServiceAndPrivacyPolicy: z.boolean({
-		required_error:
-			'You must agree to the terms of service and privacy policy',
-	}),
 	redirectTo: z.string().optional(),
 })
 
@@ -153,22 +150,10 @@ export default function OnboardingRoute() {
 						errors={fields.name.errors}
 					/>
 
-					<CheckboxField
-						labelProps={{
-							htmlFor: fields.agreeToTermsOfServiceAndPrivacyPolicy.id,
-							children:
-								'Do you agree to our Terms of Service and Privacy Policy?',
-						}}
-						buttonProps={getInputProps(
-							fields.agreeToTermsOfServiceAndPrivacyPolicy,
-							{ type: 'checkbox' },
-						)}
-						errors={fields.agreeToTermsOfServiceAndPrivacyPolicy.errors}
-					/>
 					<input {...getInputProps(fields.redirectTo, { type: 'hidden' })} />
 					<ErrorList errors={form.errors} id={form.errorId} />
 
-					<div className="flex items-center justify-between gap-6">
+					<div className="flex flex-col gap-3">
 						<StatusButton
 							className="w-full"
 							status={isPending ? 'pending' : form.status ?? 'idle'}
@@ -177,6 +162,17 @@ export default function OnboardingRoute() {
 						>
 							Continue
 						</StatusButton>
+						<p className="text-center text-body-xs text-muted-600">
+							By clicking Continue, you agree to our{' '}
+							<Link to="/tos" target="_blank" className="underline">
+								Terms of Service
+							</Link>{' '}
+							and{' '}
+							<Link to="/privacy" target="_blank" className="underline">
+								Privacy Policy
+							</Link>
+							.
+						</p>
 					</div>
 				</Form>
 			</div>
