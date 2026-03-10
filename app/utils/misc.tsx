@@ -22,9 +22,6 @@ export function getErrorMessage(error: unknown) {
 
 export function getDomainUrl(request: Request) {
 	if (process.env.APP_ORIGIN) return process.env.APP_ORIGIN
-	if (process.env.NODE_ENV === 'production') {
-		throw new Error('APP_ORIGIN environment variable must be set in production')
-	}
 	const url = new URL(request.url)
 	const host = request.headers.get('host') ?? url.host
 	const protocol = url.protocol.replace(':', '')
