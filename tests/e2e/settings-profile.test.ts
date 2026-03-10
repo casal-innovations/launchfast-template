@@ -20,7 +20,7 @@ test('Users can update their profile photo', async ({ page, login }) => {
 
 	const beforeSrc = await page
 		.getByRole('img', {
-			name: `${user.name}’s profile photo` ?? 'Default profile image',
+			name: `${user.name}'s profile photo`,
 		})
 		.getAttribute('src')
 
@@ -41,7 +41,7 @@ test('Users can update their profile photo', async ({ page, login }) => {
 
 	const afterSrc = await page
 		.getByRole('img', {
-			name: `${user.name}'s profile photo` ?? 'Default profile image',
+			name: `${user.name}'s profile photo`,
 		})
 		.getAttribute('src')
 

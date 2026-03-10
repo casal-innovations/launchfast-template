@@ -11,10 +11,11 @@ export async function loader({ params }: LoaderFunctionArgs) {
 
 	invariantResponse(image, 'Not found', { status: 404 })
 
-	return new Response(image.blob, {
+	const blob = new Uint8Array(image.blob)
+	return new Response(blob, {
 		headers: {
 			'Content-Type': image.contentType,
-			'Content-Length': Buffer.byteLength(image.blob).toString(),
+			'Content-Length': blob.byteLength.toString(),
 			'Content-Disposition': `inline; filename="${params.imageId}"`,
 			'Cache-Control': 'public, max-age=31536000, immutable',
 		},
